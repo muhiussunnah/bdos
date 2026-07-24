@@ -53,15 +53,41 @@ npm run dev
 Users add their own keys in **Settings → AI Providers** and **Settings → Email** (Resend).
 You can optionally set platform-wide fallback keys in `.env.local`.
 
-## Deploy to Cloudflare Pages
+## Deploy
+
+### Vercel (recommended)
+
+1. Push this repo to GitHub (already done).
+2. On [vercel.com](https://vercel.com) → **Add New → Project** → import the repo.
+3. Framework preset auto-detects **Next.js** — no build config needed.
+4. Add the environment variables below (Project → Settings → Environment Variables), then **Deploy**.
+
+**Environment variables to set on Vercel:**
+
+| Key | Value |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | from Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Supabase → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | from Supabase → Settings → API (secret) |
+| `NEXT_PUBLIC_ADMIN_EMAIL` | your email (unlocks `/admin`) |
+| `NEXT_PUBLIC_APP_URL` | your production URL, e.g. `https://bdos.vercel.app` |
+| `RESEND_API_KEY` | optional platform fallback |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY` / `OPENROUTER_API_KEY` | optional fallbacks |
+
+After deploying, add the Vercel URL to **Supabase → Authentication → URL Configuration**
+(Site URL + `…/auth/callback` redirect).
+
+To make follow-ups and reports hands-free, add a **Vercel Cron Job** that hits
+`/api/followups/run` and `/api/reports/daily` each morning.
+
+### Cloudflare Pages (alternative)
 
 ```bash
 npm run deploy
 ```
 
-Set the same environment variables in the Cloudflare Pages dashboard. To make follow-ups and
-reports fully hands-free, add a **Cron Trigger** that calls `/api/followups/run` and
-`/api/reports/daily` each morning.
+Set the same environment variables in the Cloudflare Pages dashboard, and use a **Cron Trigger**
+for the automation endpoints.
 
 ## Project structure
 
