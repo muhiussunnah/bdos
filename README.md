@@ -82,12 +82,8 @@ To make follow-ups and reports hands-free, add a **Vercel Cron Job** that hits
 
 ### Cloudflare Pages (alternative)
 
-```bash
-npm run deploy
-```
-
-Set the same environment variables in the Cloudflare Pages dashboard, and use a **Cron Trigger**
-for the automation endpoints.
+Add the `@cloudflare/next-on-pages` adapter and a build/deploy script, set the same environment
+variables in the Cloudflare Pages dashboard, and use a **Cron Trigger** for the automation endpoints.
 
 ## Project structure
 
