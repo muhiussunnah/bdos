@@ -1,0 +1,36 @@
+name: Deploy to Vercel (deploy hook)
+
+# WHY THIS EXISTS: the repo owner has multiple Vercel accounts (this project
+# lives on the client's Vercel account, other projects live on the Writerify
+# account) but only ONE GitHub identity — and a GitHub login can be connected
+# to only one Vercel account at a time. Whichever account does NOT hold the
+# connection gets its Git-integration deployments silently "Blocked" ("commit
+# author did not have contributing access"). This workflow sidesteps the whole
+# problem: on every push to main it pings a Vercel Deploy Hook, which builds
+# the branch as the project owner — no GitHub identity needed, ever.
+#
+# Setup (one time): create a Deploy Hook in Vercel → this project →
+# Settings → Git → Deploy Hooks (branch: main), then save its URL as the
+# repository secret VERCEL_DEPLOY_HOOK (repo Settings → Secrets and
+# variables → Actions).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the Vercel deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::VERCEL_DEPLOY_HOOK secret is not set — skipping (Vercel Git integration may still deploy this push if the GitHub identity is connected to this project's Vercel account)."
+            exit 0
+          fi
+          curl -sf -X POST "$HOOK" > /dev/null
+          echo "Deploy hook pinged — Vercel is building main."
