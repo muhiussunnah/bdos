@@ -20,6 +20,15 @@ function LoginInner() {
 
   const supabase = createClient();
 
+  function authError(err: unknown, fallback: string): string {
+    const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+    const msg = (raw || '').trim();
+    if (!msg || msg === '{}' || msg === '[object Object]') return fallback;
+    if (/error sending|smtp|recovery email|confirmation email|magic link/i.test(msg))
+      return 'We couldn’t send the email — your email provider looks misconfigured. Please try again shortly.';
+    return msg;
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!supabaseConfigured) {
@@ -45,7 +54,8 @@ function LoginInner() {
         router.refresh();
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Authentication failed');
+      console.error('[auth] submit', err);
+      toast.error(authError(err, 'Authentication failed. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -62,7 +72,8 @@ function LoginInner() {
       if (error) throw error;
       toast.success('Magic link sent — check your email.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not send link');
+      console.error('[auth] magicLink', err);
+      toast.error(authError(err, 'Could not send the magic link. Please try again shortly.'));
     } finally {
       setBusy(false);
     }
@@ -78,7 +89,8 @@ function LoginInner() {
       if (error) throw error;
       toast.success('Password reset link sent — check your email.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not send reset link');
+      console.error('[auth] forgotPassword', err);
+      toast.error(authError(err, 'Could not send the reset email. Please try again shortly.'));
     } finally {
       setBusy(false);
     }
