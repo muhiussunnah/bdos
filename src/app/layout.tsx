@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { Schibsted_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { BRAND } from '@/lib/constants';
+import { Pwa } from '@/components/Pwa';
 import './globals.css';
 
 // Variable fonts — one file each, all weights, minimal payload.
-const sans = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const sans = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' });
 
 const SITE = 'https://klientic.com';
@@ -32,17 +33,23 @@ export const metadata: Metadata = {
     url: SITE,
     title: `${BRAND.name} — Find, win & keep clients on autopilot`,
     description: DESC,
+    images: [{ url: '/og.jpg', width: 1200, height: 630, alt: `${BRAND.name} — Find, win & keep clients on autopilot` }],
   },
   twitter: {
     card: 'summary_large_image',
     title: `${BRAND.name} — Find, win & keep clients on autopilot`,
     description: DESC,
+    images: ['/og.jpg'],
   },
   icons: {
-    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
-    apple: '/mainlogo.png',
-    shortcut: '/favicon.svg',
+    icon: [
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
+    ],
+    apple: '/apple-touch-icon.png',
+    shortcut: '/icon-192.png',
   },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: BRAND.name },
 };
 
 export const viewport: Viewport = {
@@ -59,6 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${mono.variable}`}>
         {children}
+        <Pwa />
         <Toaster
           position="bottom-center"
           toastOptions={{

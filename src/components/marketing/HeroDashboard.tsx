@@ -134,9 +134,8 @@ export function HeroDashboard() {
         {/* sidebar */}
         <div className="flex flex-col gap-0.5 p-2.5" style={{ background: '#0E0916' }}>
           <div className="mb-2 flex items-center gap-2 px-1.5 py-1">
-            <span className="grid h-7 w-7 flex-none place-items-center rounded-lg" style={{ background: 'linear-gradient(135deg,#B44BF0,#A435E8 45%,#E0457E)' }}>
-              <svg width="15" height="15" viewBox="0 0 100 100" fill="none"><path d="M30 20 V80" stroke="#fff" strokeWidth="12.5" strokeLinecap="round" /><path d="M39 52 L64 80" stroke="#fff" strokeWidth="12.5" strokeLinecap="round" /><path d="M39 52 L78 24" stroke="#fff" strokeWidth="12.5" strokeLinecap="round" /><path d="M60 24 L78 24 L78 42" stroke="#fff" strokeWidth="10.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.webp" alt="" aria-hidden width={28} height={28} className="h-7 w-7 flex-none" />
             <span className="hidden text-[13px] font-black text-white sm:block">Klientic</span>
           </div>
           {NAV.map((n) => (

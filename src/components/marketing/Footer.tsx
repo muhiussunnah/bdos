@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { BRAND } from '@/lib/constants';
 import { LogoMark } from '@/components/Logo';
 import { ShieldCheck, ArrowRight, Facebook, Linkedin, Instagram } from 'lucide-react';
+import { InstallButton } from '@/components/marketing/InstallButton';
 
 const PRODUCT: [string, string][] = [
   ['Features', '/features'],
@@ -144,6 +145,8 @@ export function MarketingFooter() {
             </Link>
           </div>
         </div>
+
+        <InstallButton />
       </div>
 
       {/* bottom bar */}
