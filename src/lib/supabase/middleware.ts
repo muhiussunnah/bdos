@@ -11,6 +11,22 @@ export async function updateSession(request: NextRequest) {
   // If Supabase isn't configured yet, let everything through (setup mode).
   if (!URL || !ANON) return response;
 
+  const path0 = request.nextUrl.pathname;
+
+  // Robustness: an auth link may land on the site root (e.g. `/?code=...`) if
+  // the Supabase Site URL / redirect list isn't tuned. Route any stray code
+  // through the callback so confirm / recovery / magic links still work.
+  const code = request.nextUrl.searchParams.get('code');
+  if (code && !path0.startsWith('/auth/callback')) {
+    const type = request.nextUrl.searchParams.get('type');
+    const url = request.nextUrl.clone();
+    url.pathname = '/auth/callback';
+    url.search = '';
+    url.searchParams.set('code', code);
+    url.searchParams.set('next', type === 'recovery' ? '/auth/reset' : '/app/dashboard');
+    return NextResponse.redirect(url);
+  }
+
   const supabase = createServerClient(URL, ANON, {
     cookies: {
       getAll() {
