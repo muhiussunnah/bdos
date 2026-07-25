@@ -4,18 +4,14 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, ArrowRight } from 'lucide-react';
 import { MKT_NAV } from '@/lib/marketing';
-import { BRAND } from '@/lib/constants';
+import { Logo } from '@/components/Logo';
 
 export function MarketingHeader() {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-50 border-b border-[#ECEAF1] bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-[10px] text-[16px] font-black text-white"
-            style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)', boxShadow: '0 4px 14px rgba(164,53,232,.35)' }}>B</span>
-          <span className="text-[16px] font-black tracking-tight text-[#16121F]">{BRAND.name}</span>
-        </Link>
+        <Link href="/"><Logo size={34} /></Link>
 
         <nav className="ml-4 hidden items-center gap-1 md:flex">
           {MKT_NAV.map((n) => (

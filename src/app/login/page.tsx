@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Sparkles, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { createClient, supabaseConfigured } from '@/lib/supabase/client';
 import { BRAND } from '@/lib/constants';
+import { LogoMark } from '@/components/Logo';
 
 function LoginInner() {
   const router = useRouter();
@@ -72,8 +73,7 @@ function LoginInner() {
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden p-12 text-white"
         style={{ background: 'radial-gradient(120% 120% at 0% 0%, #241636 0%, #0E0916 55%)' }}>
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl text-lg font-black"
-            style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)', boxShadow: '0 8px 24px rgba(164,53,232,.45)' }}>B</div>
+          <LogoMark size={40} />
           <div>
             <div className="text-[15px] font-extrabold tracking-tight">{BRAND.name}</div>
             <div className="text-[11px] text-white/45">{BRAND.full}</div>
@@ -108,8 +108,7 @@ function LoginInner() {
       <div className="flex items-center justify-center bg-bg p-6">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-8 flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl text-lg font-black text-white"
-              style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}>B</div>
+            <LogoMark size={40} />
             <div className="text-[15px] font-extrabold">{BRAND.name}</div>
           </div>
           <h2 className="text-2xl font-black tracking-tight text-ink">

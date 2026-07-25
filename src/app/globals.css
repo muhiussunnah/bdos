@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   BDOS design system — refined from the product spec.
+   Klientic design system — refined from the product spec.
    Light + dark, magenta→violet accent, tuned depth & motion.
    ============================================================ */
 :root {
@@ -160,3 +160,38 @@
 .dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 0 2px; animation: bob 1.2s infinite; }
 .dots span:nth-child(2) { animation-delay: .18s; }
 .dots span:nth-child(3) { animation-delay: .36s; }
+
+/* ── marketing polish ──────────────────────────────────────── */
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes floaty2 { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+@keyframes aurora { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes glowpulse { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .85; transform: scale(1.08); } }
+@keyframes shimmerline { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.anim-float { animation: floaty 6s ease-in-out infinite; }
+.anim-float2 { animation: floaty2 7.5s ease-in-out infinite; }
+.anim-glow { animation: glowpulse 7s ease-in-out infinite; }
+.anim-marquee { animation: marquee 32s linear infinite; }
+.aurora {
+  background: linear-gradient(120deg, #1a0f2e, #241636, #2a1240, #1a0f2e);
+  background-size: 300% 300%;
+  animation: aurora 18s ease infinite;
+}
+.grid-fade {
+  background-image: linear-gradient(rgba(164,53,232,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(164,53,232,.18) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 0%, transparent 75%);
+}
+.dot-fade {
+  background-image: radial-gradient(rgba(20,18,28,.09) 1.1px, transparent 1.1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 0%, transparent 78%);
+}
+.text-grad { background: linear-gradient(135deg,#C77BFF,#FF8FB8); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.text-grad-ink { background: linear-gradient(135deg,#A435E8,#E0457E); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.glass-card { background: rgba(255,255,255,.9); backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,.7); box-shadow: 0 20px 60px rgba(20,18,28,.14); }
+@media (prefers-reduced-motion: reduce) {
+  .anim-float, .anim-float2, .anim-glow, .anim-marquee, .aurora { animation: none !important; }
+}

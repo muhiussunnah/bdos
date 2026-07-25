@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
   let text = '';
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 BDOS-bot' } });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 Klientic-bot' } });
     const html = await res.text();
     text = html
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')

@@ -7,6 +7,7 @@ import { ChevronDown, Plus, Shield, Check } from 'lucide-react';
 import { NAV, NAV_GROUPS, BRAND } from '@/lib/constants';
 import { useApp } from '@/components/providers/AppProvider';
 import { Icon } from '@/components/Icon';
+import { LogoMark } from '@/components/Logo';
 import { cn } from '@/lib/utils';
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -28,8 +29,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       >
         {/* brand */}
         <div className="flex items-center gap-3 px-2 pb-4 pt-1">
-          <div className="grid h-[34px] w-[34px] place-items-center rounded-[10px] text-[17px] font-black"
-            style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)', boxShadow: '0 4px 14px rgba(164,53,232,.4)' }}>B</div>
+          <LogoMark size={34} />
           <div>
             <b className="block text-[15px] font-extrabold tracking-tight">{BRAND.name}</b>
             <span className="-mt-0.5 block text-[11px] text-white/40">{BRAND.full}</span>

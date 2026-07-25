@@ -10,9 +10,9 @@ export default function ContactPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const subject = encodeURIComponent(`BDOS enquiry from ${f.name || 'website'}`);
+    const subject = encodeURIComponent(`Klientic enquiry from ${f.name || 'website'}`);
     const body = encodeURIComponent(`${f.message}\n\n— ${f.name} (${f.email})`);
-    window.location.href = `mailto:hello@bdos.app?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:hello@klientic.com?subject=${subject}&body=${body}`;
   }
 
   return (
@@ -22,9 +22,9 @@ export default function ContactPage() {
           <h1 className="text-[38px] font-black tracking-tight text-[#16121F]">Let’s talk</h1>
           <p className="mt-3 text-[16px] leading-relaxed text-[#6A6478]">Questions about {BRAND.name}, a demo, or a multi-brand setup? We usually reply within a business day.</p>
           <div className="mt-8 space-y-4">
-            <a href="mailto:hello@bdos.app" className="flex items-center gap-3 rounded-2xl border border-[#ECEAF1] p-4 transition hover:border-[#A435E8]">
+            <a href="mailto:hello@klientic.com" className="flex items-center gap-3 rounded-2xl border border-[#ECEAF1] p-4 transition hover:border-[#A435E8]">
               <span className="grid h-11 w-11 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}><Mail size={20} /></span>
-              <div><div className="text-[14px] font-bold text-[#16121F]">Email us</div><div className="text-[13px] text-[#6A6478]">hello@bdos.app</div></div>
+              <div><div className="text-[14px] font-bold text-[#16121F]">Email us</div><div className="text-[13px] text-[#6A6478]">hello@klientic.com</div></div>
             </a>
             <div className="flex items-center gap-3 rounded-2xl border border-[#ECEAF1] p-4">
               <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ background: 'rgba(164,53,232,.1)', color: '#A435E8' }}><MessageSquare size={20} /></span>

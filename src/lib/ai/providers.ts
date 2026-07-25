@@ -47,7 +47,7 @@ async function openaiStyle({ provider, model, apiKey, system, messages, temperat
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
       ...(provider === 'openrouter'
-        ? { 'HTTP-Referer': 'https://bdos.app', 'X-Title': 'BDOS' }
+        ? { 'HTTP-Referer': 'https://klientic.com', 'X-Title': 'Klientic' }
         : {}),
     },
     body: JSON.stringify({

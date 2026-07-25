@@ -44,8 +44,8 @@ export async function resolveEmail(supabase: SupabaseClient, ownerId: string) {
   ]);
   const apiKey = secret?.api_key || process.env.RESEND_API_KEY || '';
   const fromEmail = settings?.from_email || (secret?.meta as { from_email?: string })?.from_email;
-  const fromName = settings?.from_name || 'BDOS';
-  const from = fromEmail ? `${fromName} <${fromEmail}>` : process.env.RESEND_FROM || 'BDOS <onboarding@resend.dev>';
+  const fromName = settings?.from_name || 'Klientic';
+  const from = fromEmail ? `${fromName} <${fromEmail}>` : process.env.RESEND_FROM || 'Klientic <onboarding@resend.dev>';
   return { apiKey, from };
 }
 

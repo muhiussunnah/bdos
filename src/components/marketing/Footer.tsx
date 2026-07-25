@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BRAND } from '@/lib/constants';
+import { LogoMark } from '@/components/Logo';
 
 const COLS = [
   { title: 'Product', links: [['Features', '/features'], ['Pricing', '/pricing'], ['Log in', '/login'], ['Start free', '/login']] },
@@ -13,7 +14,7 @@ export function MarketingFooter() {
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-[10px] text-[16px] font-black text-white" style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}>B</span>
+            <LogoMark size={34} />
             <span className="text-[16px] font-black tracking-tight">{BRAND.name}</span>
           </div>
           <p className="mt-3 max-w-xs text-[13.5px] leading-relaxed text-white/55">{BRAND.tagline} An AI business-development operating system for teams that hunt.</p>

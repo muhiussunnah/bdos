@@ -19,7 +19,7 @@ export default function BlogPage() {
     <>
       <section className="border-b border-[#ECEAF1] bg-white py-16">
         <div className="mx-auto max-w-6xl px-5">
-          <div className="text-[13px] font-bold uppercase tracking-wider text-[#A435E8]">The BDOS blog</div>
+          <div className="text-[13px] font-bold uppercase tracking-wider text-[#A435E8]">The Klientic blog</div>
           <h1 className="mt-2 text-[38px] font-black tracking-tight text-[#16121F] md:text-[48px]">Outbound, done right</h1>
           <p className="mt-3 max-w-xl text-[16px] text-[#6A6478]">Playbooks and thinking on AI-assisted business development.</p>
         </div>

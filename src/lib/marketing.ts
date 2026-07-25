@@ -49,30 +49,46 @@ export const STEPS = [
 
 export const PROVIDERS_LOGOS = ['OpenAI', 'Anthropic', 'Google Gemini', 'OpenRouter', 'Resend', 'Supabase'];
 
-export const TIERS = [
+export interface Tier {
+  name: string;
+  monthly: number;
+  lifetime: number;
+  tagline: string;
+  features: string[];
+  cta: string;
+  highlight: boolean;
+  badge?: string;
+}
+
+export const TIERS: Tier[] = [
   {
     name: 'Starter',
-    price: 29,
+    monthly: 49,
+    lifetime: 399,
     tagline: 'For solo founders opening their first pipeline.',
-    features: ['1 project', 'Up to 500 leads', 'AI outreach & follow-ups', 'Inbox intelligence', 'Bring your own AI key', 'Email support'],
+    features: ['1 project', 'Up to 500 leads / mo', 'AI outreach & follow-ups', 'Inbox intelligence', 'Bring your own AI key', 'Email support'],
     cta: 'Start free trial',
     highlight: false,
   },
   {
     name: 'Growth',
-    price: 79,
+    monthly: 89,
+    lifetime: 699,
     tagline: 'For teams running outbound across several businesses.',
-    features: ['5 projects', 'Up to 10,000 leads', 'Everything in Starter', 'Daily reports & call lists', 'Knowledge base per project', 'Priority support'],
+    features: ['5 projects', 'Up to 10,000 leads / mo', 'Everything in Starter', 'Daily reports & call lists', 'Knowledge base per project', 'Priority support'],
     cta: 'Start free trial',
     highlight: true,
+    badge: 'MOST POPULAR',
   },
   {
     name: 'Scale',
-    price: 199,
+    monthly: 199,
+    lifetime: 999,
     tagline: 'For agencies and multi-brand operators.',
     features: ['Unlimited projects', 'Unlimited leads', 'Everything in Growth', 'Admin console & seats', 'Automation scheduling', 'Dedicated success manager'],
     cta: 'Talk to us',
     highlight: false,
+    badge: 'BEST VALUE',
   },
 ];
 
@@ -110,7 +126,7 @@ export const POSTS: BlogPost[] = [
     title: 'The AI is not the salesperson — it’s the leverage',
     excerpt: 'The best outbound teams don’t replace humans with AI. They put AI underneath humans, and let it do everything except the closing.',
     date: '2026-07-10',
-    author: 'The BDOS Team',
+    author: 'The Klientic Team',
     role: 'Product',
     readTime: '5 min',
     category: 'Philosophy',
@@ -129,7 +145,7 @@ export const POSTS: BlogPost[] = [
     title: 'The follow-up cadence that actually converts',
     excerpt: 'Most deals are lost in the gap between the first email and the third. Here’s the 3/7/21 rhythm and why it works.',
     date: '2026-07-03',
-    author: 'The BDOS Team',
+    author: 'The Klientic Team',
     role: 'Growth',
     readTime: '4 min',
     category: 'Playbook',
@@ -147,7 +163,7 @@ export const POSTS: BlogPost[] = [
     title: 'Why we never let the AI make things up',
     excerpt: 'Hallucinated claims kill trust in one line. Grounding every message in your knowledge base is the difference between a tool you can send and one you can’t.',
     date: '2026-06-24',
-    author: 'The BDOS Team',
+    author: 'The Klientic Team',
     role: 'Engineering',
     readTime: '6 min',
     category: 'Engineering',

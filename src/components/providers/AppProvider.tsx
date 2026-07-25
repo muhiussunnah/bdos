@@ -27,7 +27,7 @@ export const useApp = () => {
   return v;
 };
 
-const LS_KEY = 'bdos.activeProject';
+const LS_KEY = 'klientic.activeProject';
 
 export function AppProvider({
   user,

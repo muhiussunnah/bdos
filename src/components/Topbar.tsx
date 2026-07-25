@@ -29,7 +29,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const [userMenu, setUserMenu] = useState(false);
 
   const nav = NAV.find((n) => path.startsWith(n.href));
-  const title = path.startsWith('/admin') ? 'Admin' : nav?.label || 'BDOS';
+  const title = path.startsWith('/admin') ? 'Admin' : nav?.label || 'Klientic';
   const subtitle = SUBTITLES[path] || (path.startsWith('/admin') ? 'Platform control' : '');
   const dark = (settings?.theme || 'light') === 'dark';
 

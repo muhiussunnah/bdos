@@ -1,7 +1,9 @@
 export const BRAND = {
-  name: 'BDOS',
-  full: 'Business Development OS',
-  tagline: 'The AI creates leverage. Your team closes.',
+  name: 'Klientic',
+  full: 'Client Acquisition OS',
+  domain: 'klientic.com',
+  email: 'hello@klientic.com',
+  tagline: 'Find, win and keep clients — on autopilot.',
 };
 
 export type NavItem = { href: string; label: string; icon: string; group: string; badgeKey?: string };
