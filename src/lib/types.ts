@@ -17,6 +17,8 @@ export interface Profile {
   plan: string;
   blocked: boolean;
   block_message: string | null;
+  ref_code: string | null;
+  referred_by: string | null;
   created_at: string;
 }
 

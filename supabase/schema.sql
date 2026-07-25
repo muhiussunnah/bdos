@@ -343,3 +343,87 @@ end $$;
 
 -- ── seed your admin account (edit the email, then re-run this one line) ──────
 -- update public.profiles set is_admin = true where lower(email) = 'you@example.com';
+
+-- ============================================================================
+-- UPGRADE 2026-07 — default admins, referrals, avatars, rich admin dashboard
+-- Idempotent: safe to re-run the whole file.
+-- ============================================================================
+
+-- profiles: referral columns
+alter table public.profiles add column if not exists ref_code text;
+alter table public.profiles add column if not exists referred_by text;
+create unique index if not exists profiles_ref_code_uidx on public.profiles(ref_code);
+
+-- default admins (edit this list to add/remove super admins)
+update public.profiles set is_admin = true
+  where lower(email) in ('itsinjamul@gmail.com', 'gigwings@gmail.com');
+
+-- give existing rows a referral code if missing
+update public.profiles
+  set ref_code = upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))
+  where ref_code is null;
+
+-- New-user trigger: auto-admin the default emails, generate a ref code,
+-- capture ?ref referrer from signup metadata.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_admin boolean; v_ref text;
+begin
+  v_admin := lower(new.email) in ('itsinjamul@gmail.com', 'gigwings@gmail.com');
+  v_ref := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+  insert into public.profiles (id, email, full_name, is_admin, ref_code, referred_by)
+  values (
+    new.id, new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    v_admin, v_ref, nullif(new.raw_user_meta_data->>'ref', '')
+  )
+  on conflict (id) do nothing;
+  insert into public.user_settings (owner_id) values (new.id) on conflict do nothing;
+  return new;
+end $$;
+
+-- Rich admin dashboard: totals + lead mix + signup growth in one call.
+create or replace function public.admin_overview()
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare result jsonb;
+begin
+  if not public.is_admin() then raise exception 'not_authorized'; end if;
+  select jsonb_build_object(
+    'users',        (select count(*) from public.profiles),
+    'active_users', (select count(distinct owner_id) from public.leads),
+    'projects',     (select count(*) from public.projects),
+    'leads',        (select count(*) from public.leads),
+    'messages',     (select count(*) from public.messages),
+    'sent',         (select count(*) from public.messages where status = 'sent'),
+    'positive',     (select count(*) from public.leads where stage in ('positive','meeting','closed')),
+    'by_priority',  (select coalesce(jsonb_object_agg(p, c), '{}'::jsonb)
+                       from (select priority::text p, count(*) c from public.leads group by priority) x),
+    'by_stage',     (select coalesce(jsonb_object_agg(s, c), '{}'::jsonb)
+                       from (select stage::text s, count(*) c from public.leads group by stage) y),
+    'signups',      (select coalesce(jsonb_agg(jsonb_build_object('d', d, 'c', c) order by d), '[]'::jsonb)
+                       from (select created_at::date d, count(*) c from public.profiles group by created_at::date) z)
+  ) into result;
+  return result;
+end $$;
+
+-- Referral count for a user (their own).
+create or replace function public.my_referral_count()
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.profiles
+   where referred_by = (select ref_code from public.profiles where id = auth.uid());
+$$;
+
+-- Avatars storage bucket (public read, owner-scoped writes by path).
+insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true)
+  on conflict (id) do nothing;
+drop policy if exists avatars_read on storage.objects;
+create policy avatars_read on storage.objects for select using (bucket_id = 'avatars');
+drop policy if exists avatars_insert on storage.objects;
+create policy avatars_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists avatars_update on storage.objects;
+create policy avatars_update on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists avatars_delete on storage.objects;
+create policy avatars_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

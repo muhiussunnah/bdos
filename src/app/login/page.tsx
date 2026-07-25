@@ -29,10 +29,11 @@ function LoginInner() {
     setBusy(true);
     try {
       if (mode === 'signup') {
+        const ref = params.get('ref') || (typeof window !== 'undefined' ? localStorage.getItem('klientic.ref') : null);
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name } },
+          options: { data: { full_name: name, ...(ref ? { ref } : {}) } },
         });
         if (error) throw error;
         toast.success('Account created. Check your inbox to confirm, then sign in.');

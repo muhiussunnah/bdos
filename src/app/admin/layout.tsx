@@ -2,11 +2,10 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppProvider } from '@/components/providers/AppProvider';
 import { AppShell } from '@/components/AppShell';
+import { isAdminEmail } from '@/lib/adminEmails';
 import type { Profile, Project, UserSettings } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase();
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -19,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     supabase.from('user_settings').select('*').eq('owner_id', user.id).maybeSingle(),
   ]);
 
-  const isAdmin = Boolean(profile?.is_admin) || user.email?.toLowerCase() === ADMIN_EMAIL;
+  const isAdmin = Boolean(profile?.is_admin) || isAdminEmail(user.email);
   if (!isAdmin) redirect('/app/dashboard');
 
   return (

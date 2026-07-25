@@ -20,12 +20,15 @@ export const NAV: NavItem[] = [
   { href: '/app/knowledge', label: 'Knowledge Base', icon: 'BookOpen', group: 'system' },
   { href: '/app/projects', label: 'Projects', icon: 'FolderKanban', group: 'system' },
   { href: '/app/settings', label: 'Settings', icon: 'Settings', group: 'system' },
+  { href: '/app/account', label: 'My Account', icon: 'UserCircle', group: 'account' },
+  { href: '/app/affiliate', label: 'Affiliate', icon: 'Share2', group: 'account' },
 ];
 
 export const NAV_GROUPS: Record<string, string> = {
   agent: 'Agent',
   pipeline: 'Pipeline',
   system: 'System',
+  account: 'Account',
 };
 
 export type ProviderKey = 'openai' | 'anthropic' | 'google' | 'openrouter';

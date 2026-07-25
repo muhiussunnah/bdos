@@ -74,10 +74,15 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
 
       <div className="relative">
         <button onClick={() => setUserMenu((v) => !v)} className="flex items-center gap-2 rounded-[11px] border border-line bg-surface py-1.5 pl-1.5 pr-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-lg text-[11px] font-extrabold text-white"
-            style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}>
-            {initials(profile?.full_name || user.email)}
-          </span>
+          {profile?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-lg object-cover" />
+          ) : (
+            <span className="grid h-7 w-7 place-items-center rounded-lg text-[11px] font-extrabold text-white"
+              style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}>
+              {initials(profile?.full_name || user.email)}
+            </span>
+          )}
           <ChevronDown size={13} className="text-faint" />
         </button>
         {userMenu && (
