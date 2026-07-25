@@ -5,8 +5,10 @@ import { POSTS } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
 
 export const metadata: Metadata = {
-  title: `Blog — ${BRAND.name}`,
+  title: 'Blog',
   description: 'Playbooks and thinking on AI-assisted outbound, follow-up cadence and building pipelines that follow themselves up.',
+  alternates: { canonical: '/blog' },
+  openGraph: { url: '/blog', title: `Blog — ${BRAND.name}` },
 };
 
 function fmt(d: string) {

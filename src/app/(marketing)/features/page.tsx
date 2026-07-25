@@ -5,8 +5,10 @@ import { FEATURES } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
 
 export const metadata: Metadata = {
-  title: `Features — ${BRAND.name}`,
+  title: 'Features',
   description: 'Lead discovery, human outreach, follow-up automation, inbox intelligence, daily call lists and a grounded knowledge base.',
+  alternates: { canonical: '/features' },
+  openGraph: { url: '/features', title: `Features — ${BRAND.name}` },
 };
 
 const ICONS: Record<string, React.ElementType> = { Radar, PenLine, Repeat, Inbox, ListChecks, BookOpen };

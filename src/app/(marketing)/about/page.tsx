@@ -3,7 +3,12 @@ import type { Metadata } from 'next';
 import { ArrowRight } from 'lucide-react';
 import { BRAND } from '@/lib/constants';
 
-export const metadata: Metadata = { title: `About — ${BRAND.name}`, description: 'Why we built an AI operating system for business development.' };
+export const metadata: Metadata = {
+  title: 'About',
+  description: 'Why we built an AI operating system for client acquisition.',
+  alternates: { canonical: '/about' },
+  openGraph: { url: '/about', title: `About — ${BRAND.name}` },
+};
 
 export default function AboutPage() {
   return (

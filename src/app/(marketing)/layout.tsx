@@ -1,6 +1,7 @@
 import { MarketingHeader } from '@/components/marketing/Header';
 import { MarketingFooter } from '@/components/marketing/Footer';
 import { ForceLight } from '@/components/marketing/ForceLight';
+import { FloatingUI } from '@/components/marketing/FloatingUI';
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <MarketingHeader />
       <main>{children}</main>
       <MarketingFooter />
+      <FloatingUI />
     </div>
   );
 }

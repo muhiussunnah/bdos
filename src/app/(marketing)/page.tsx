@@ -10,6 +10,33 @@ import { BRAND } from '@/lib/constants';
 export const metadata: Metadata = {
   title: `${BRAND.name} — Find, win & keep clients on autopilot`,
   description: 'Klientic finds your ideal clients, writes the outreach, chases every follow-up and books the meetings — automatically. The all-in-one client acquisition engine.',
+  alternates: { canonical: '/' },
+  openGraph: { url: '/' },
+};
+
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      name: 'Klientic',
+      url: 'https://klientic.com',
+      logo: 'https://klientic.com/favicon.svg',
+      description: 'The all-in-one client acquisition engine.',
+    },
+    {
+      '@type': 'WebSite',
+      name: 'Klientic',
+      url: 'https://klientic.com',
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Klientic',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      offers: { '@type': 'Offer', price: '49', priceCurrency: 'USD' },
+    },
+  ],
 };
 
 const FICON: Record<string, React.ElementType> = { Radar, PenLine, Repeat, Inbox, ListChecks, BookOpen };
@@ -17,6 +44,7 @@ const FICON: Record<string, React.ElementType> = { Radar, PenLine, Repeat, Inbox
 export default function HomePage() {
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
       <Hero />
       <LogoMarquee />
       <PainSolution />

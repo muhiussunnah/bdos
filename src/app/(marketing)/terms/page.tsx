@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { BRAND } from '@/lib/constants';
 
-export const metadata: Metadata = { title: `Terms — ${BRAND.name}` };
+export const metadata: Metadata = { title: 'Terms', description: 'Klientic terms of service.', alternates: { canonical: '/terms' } };
 
 const SECTIONS = [
   ['Acceptance', `By using ${BRAND.name} you agree to these terms. If you use the service on behalf of an organisation, you accept them for that organisation.`],

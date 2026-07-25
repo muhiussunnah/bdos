@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { BRAND } from '@/lib/constants';
 
-export const metadata: Metadata = { title: `Privacy — ${BRAND.name}` };
+export const metadata: Metadata = { title: 'Privacy', description: 'How Klientic handles your data.', alternates: { canonical: '/privacy' } };
 
 const SECTIONS = [
   ['Data we process', `${BRAND.name} stores the workspace data you create — projects, leads, messages, knowledge base entries and settings. Your AI and email provider keys are stored to operate the service on your behalf and are never shared across accounts.`],

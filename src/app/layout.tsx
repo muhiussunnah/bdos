@@ -4,26 +4,48 @@ import { Toaster } from 'sonner';
 import { BRAND } from '@/lib/constants';
 import './globals.css';
 
-const sans = Schibsted_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800', '900'],
-  variable: '--font-sans',
-  display: 'swap',
-});
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-mono',
-  display: 'swap',
-});
+// Variable fonts — one file each, all weights, minimal payload.
+const sans = Schibsted_Grotesk({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'swap' });
+
+const SITE = 'https://klientic.com';
+const DESC =
+  'Klientic finds your ideal clients, writes the outreach, chases every follow-up and books the meetings — automatically. The all-in-one client acquisition engine.';
 
 export const metadata: Metadata = {
-  title: `${BRAND.name} — ${BRAND.full}`,
-  description: BRAND.tagline,
+  metadataBase: new URL(SITE),
+  title: {
+    default: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    template: `%s · ${BRAND.name}`,
+  },
+  description: DESC,
+  applicationName: BRAND.name,
+  keywords: ['client acquisition', 'lead generation', 'AI SDR', 'outbound sales', 'cold email', 'sales automation', 'CRM', 'follow-up automation'],
+  authors: [{ name: BRAND.name }],
+  creator: BRAND.name,
+  publisher: BRAND.name,
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 } },
+  openGraph: {
+    type: 'website',
+    siteName: BRAND.name,
+    locale: 'en_US',
+    url: SITE,
+    title: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    description: DESC,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    description: DESC,
+  },
+  icons: { icon: '/favicon.svg', apple: '/favicon.svg' },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0E0916',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F4F3F7' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0710' },
+  ],
   width: 'device-width',
   initialScale: 1,
 };
@@ -37,12 +59,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           position="bottom-center"
           toastOptions={{
             style: {
-              background: 'var(--text)',
-              color: 'var(--bg)',
-              border: 'none',
-              borderRadius: '12px',
-              fontFamily: 'var(--font-sans)',
-              fontWeight: 600,
+              background: 'var(--text)', color: 'var(--bg)', border: 'none',
+              borderRadius: '12px', fontFamily: 'var(--font-sans)', fontWeight: 600,
             },
           }}
         />

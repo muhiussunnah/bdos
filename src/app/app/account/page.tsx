@@ -29,18 +29,15 @@ export default function AccountPage() {
     if (file.size > 3 * 1024 * 1024) return toast.error('Image must be under 3MB');
     setBusy('avatar');
     try {
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-      const path = `${user.id}/avatar.${ext}`;
-      const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, cacheControl: '3600' });
-      if (error) throw error;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      const url = `${data.publicUrl}?v=${Date.now()}`;
-      const { error: e2 } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id);
-      if (e2) throw e2;
-      setAvatar(url);
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/account/avatar', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAvatar(data.url);
       toast.success('Profile photo updated');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed. Did you run the storage section of schema.sql?');
+      toast.error(e instanceof Error ? e.message : 'Upload failed');
     } finally { setBusy(null); }
   }
 
