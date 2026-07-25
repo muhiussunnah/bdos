@@ -360,6 +360,17 @@ alter table public.profiles add column if not exists ref_code text;
 alter table public.profiles add column if not exists referred_by text;
 create unique index if not exists profiles_ref_code_uidx on public.profiles(ref_code);
 
+-- Backfill: anyone who signed up BEFORE the schema existed has no profile row.
+-- Create profiles + settings for every existing auth user (idempotent).
+insert into public.profiles (id, email, full_name, is_admin, ref_code)
+select u.id, u.email, coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+       lower(u.email) in ('itsinjamul@gmail.com', 'gigwings@gmail.com'),
+       upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))
+from auth.users u
+on conflict (id) do nothing;
+insert into public.user_settings (owner_id)
+select id from auth.users on conflict do nothing;
+
 -- default admins (edit this list to add/remove super admins)
 update public.profiles set is_admin = true
   where lower(email) in ('itsinjamul@gmail.com', 'gigwings@gmail.com');
