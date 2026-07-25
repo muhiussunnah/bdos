@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Menu, X, ArrowRight } from 'lucide-react';
 import { MKT_NAV } from '@/lib/marketing';
@@ -8,14 +9,17 @@ import { Logo } from '@/components/Logo';
 
 export function MarketingHeader() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
   return (
     <header className="sticky top-0 z-50 border-b border-[#ECEAF1] bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-        <Link href="/"><Logo size={34} /></Link>
+        <Link href="/" aria-label="Klientic home"><Logo size={34} /></Link>
 
-        <nav className="ml-4 hidden items-center gap-1 md:flex">
+        <nav className="ml-2 hidden items-center gap-0.5 md:flex">
           {MKT_NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="rounded-lg px-3 py-2 text-[14px] font-semibold text-[#6A6478] transition hover:bg-[#F4F3F7] hover:text-[#16121F]">
+            <Link key={n.href} href={n.href}
+              className={`rounded-lg px-3 py-2 text-[14px] font-semibold transition ${isActive(n.href) ? 'bg-[#F4F3F7] text-[#16121F]' : 'text-[#6A6478] hover:bg-[#F4F3F7] hover:text-[#16121F]'}`}>
               {n.label}
             </Link>
           ))}
@@ -37,7 +41,8 @@ export function MarketingHeader() {
       {open && (
         <div className="border-t border-[#ECEAF1] bg-white px-5 py-3 md:hidden">
           {MKT_NAV.map((n) => (
-            <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2.5 text-[15px] font-semibold text-[#16121F]">{n.label}</Link>
+            <Link key={n.href} href={n.href} onClick={() => setOpen(false)}
+              className={`block rounded-lg px-3 py-2.5 text-[15px] font-semibold ${isActive(n.href) ? 'bg-[#F4F3F7] text-[#16121F]' : 'text-[#16121F]'}`}>{n.label}</Link>
           ))}
           <div className="mt-2 flex gap-2 border-t border-[#ECEAF1] pt-3">
             <Link href="/login" className="flex-1 rounded-[11px] border border-[#ECEAF1] py-2.5 text-center text-[14px] font-bold text-[#16121F]">Log in</Link>

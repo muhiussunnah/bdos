@@ -106,11 +106,11 @@ function Hero() {
             <HeroDashboard />
           </div>
           {/* satellite cards */}
-          <FloatCard className="anim-float2 -left-3 -top-5 hidden md:flex md:-left-8" delay="1s"
+          <FloatCard className="anim-float2 -left-4 -top-6 hidden md:flex md:-left-16 lg:-left-24" delay="1s"
             icon={<CheckCircle2 size={16} className="text-[#16A34A]" />} title="New lead scored 94" sub="Nordic Trampoline AB · Priority A" />
-          <FloatCard className="anim-float -right-4 top-8 hidden md:flex md:-right-12" delay="0s"
+          <FloatCard className="anim-float -right-4 -top-6 hidden md:flex md:-right-16 lg:-right-24" delay="0s"
             icon={<Sparkles size={16} className="text-[#A435E8]" />} title="Reply classified: Positive" sub="Draft ready · needs your approval" />
-          <FloatCard className="anim-float2 -right-2 bottom-10 hidden lg:flex md:-right-16" delay="2.5s"
+          <FloatCard className="anim-float2 -right-3 -bottom-6 hidden lg:flex md:-right-20" delay="2.5s"
             icon={<CalendarCheck size={16} className="text-[#2563EB]" />} title="Meeting booked" sub="Thu 14:00 · added to call list" />
         </div>
       </div>

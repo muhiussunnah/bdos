@@ -1,10 +1,12 @@
 // ── Public marketing site content ───────────────────────────────────────────
 
 export const MKT_NAV = [
+  { label: 'Home', href: '/' },
   { label: 'Features', href: '/features' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'Blog', href: '/blog' },
   { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
 ];
 
 export const FEATURES = [

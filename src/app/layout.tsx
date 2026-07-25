@@ -38,7 +38,11 @@ export const metadata: Metadata = {
     title: `${BRAND.name} — Find, win & keep clients on autopilot`,
     description: DESC,
   },
-  icons: { icon: '/favicon.svg', apple: '/favicon.svg' },
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    apple: '/mainlogo.png',
+    shortcut: '/favicon.svg',
+  },
 };
 
 export const viewport: Viewport = {
