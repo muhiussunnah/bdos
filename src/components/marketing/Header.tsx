@@ -13,19 +13,19 @@ export function MarketingHeader() {
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
   return (
     <header className="sticky top-0 z-50 border-b border-[#ECEAF1] bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-        <Link href="/" aria-label="Klientic home"><Logo size={34} /></Link>
+      <div className="mx-auto flex h-16 max-w-6xl items-center px-5">
+        <Link href="/" aria-label="Klientic home" className="flex-none"><Logo size={34} /></Link>
 
-        <nav className="ml-2 hidden items-center gap-0.5 md:flex">
+        <nav className="hidden flex-1 items-center justify-center gap-1 md:flex">
           {MKT_NAV.map((n) => (
             <Link key={n.href} href={n.href}
-              className={`rounded-lg px-3 py-2 text-[14px] font-semibold transition ${isActive(n.href) ? 'bg-[#F4F3F7] text-[#16121F]' : 'text-[#6A6478] hover:bg-[#F4F3F7] hover:text-[#16121F]'}`}>
+              className={`rounded-lg px-3.5 py-2 text-[14px] font-semibold transition ${isActive(n.href) ? 'bg-[#F4F3F7] text-[#16121F]' : 'text-[#6A6478] hover:bg-[#F4F3F7] hover:text-[#16121F]'}`}>
               {n.label}
             </Link>
           ))}
         </nav>
 
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="hidden flex-none items-center gap-2 md:flex">
           <Link href="/login" className="rounded-[11px] px-4 py-2 text-[14px] font-bold text-[#16121F] transition hover:bg-[#F4F3F7]">Log in</Link>
           <Link href="/login" className="inline-flex items-center gap-1.5 rounded-[11px] px-4 py-2.5 text-[14px] font-bold text-white transition hover:-translate-y-0.5"
             style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)', boxShadow: '0 4px 14px rgba(164,53,232,.32)' }}>

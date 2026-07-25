@@ -2,7 +2,7 @@ export const BRAND = {
   name: 'Klientic',
   full: 'Client Acquisition OS',
   domain: 'klientic.com',
-  email: 'hello@klientic.com',
+  email: 'support@klientic.com',
   tagline: 'Find, win and keep clients — on autopilot.',
 };
 

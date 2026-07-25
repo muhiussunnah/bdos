@@ -1,3 +1,4 @@
+import { AnnouncementBar } from '@/components/marketing/AnnouncementBar';
 import { MarketingHeader } from '@/components/marketing/Header';
 import { MarketingFooter } from '@/components/marketing/Footer';
 import { ForceLight } from '@/components/marketing/ForceLight';
@@ -7,6 +8,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-white text-[#16121F]" style={{ fontFamily: 'var(--font-sans)' }}>
       <ForceLight />
+      <AnnouncementBar />
       <MarketingHeader />
       <main>{children}</main>
       <MarketingFooter />

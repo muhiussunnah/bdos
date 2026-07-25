@@ -173,6 +173,9 @@
 .anim-float2 { animation: floaty2 7.5s ease-in-out infinite; }
 .anim-glow { animation: glowpulse 7s ease-in-out infinite; }
 .anim-marquee { animation: marquee 32s linear infinite; }
+.anim-shine { animation: shimmerline 5.5s ease-in-out infinite; }
+@keyframes promoflow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+.promo-grad { background: linear-gradient(90deg,#7C2FD6,#A435E8,#E0457E,#FF6A4D,#E0457E,#A435E8,#7C2FD6); background-size: 260% 100%; animation: promoflow 16s ease infinite; }
 .aurora {
   background: linear-gradient(120deg, #1a0f2e, #241636, #2a1240, #1a0f2e);
   background-size: 300% 300%;
@@ -194,5 +197,5 @@
 .text-grad-ink { background: linear-gradient(135deg,#A435E8,#E0457E); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .glass-card { background: rgba(255,255,255,.9); backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,.7); box-shadow: 0 20px 60px rgba(20,18,28,.14); }
 @media (prefers-reduced-motion: reduce) {
-  .anim-float, .anim-float2, .anim-glow, .anim-marquee, .aurora { animation: none !important; }
+  .anim-float, .anim-float2, .anim-glow, .anim-marquee, .aurora, .anim-shine, .promo-grad { animation: none !important; }
 }
