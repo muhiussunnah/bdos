@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { POSTS, getPost } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
+import { BlogThumb } from '@/components/marketing/BlogThumb';
 
 export function generateStaticParams() {
   return POSTS.map((p) => ({ slug: p.slug }));
@@ -57,11 +58,23 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         </header>
 
         <div className="mx-auto max-w-2xl px-5 py-14">
-          <div className="mb-10 aspect-[16/8] rounded-2xl" style={{ background: post.gradient }} />
+          <BlogThumb post={post} big className="mb-10 aspect-[16/8] rounded-2xl" />
           <div className="space-y-5">
             {post.body.map((b, i) =>
-              b.h ? <h2 key={i} className="pt-4 text-[24px] font-black tracking-tight text-[#16121F]">{b.h}</h2>
-                : <p key={i} className="text-[17px] leading-[1.75] text-[#3a3546]">{b.p}</p>
+              b.h ? (
+                <h2 key={i} className="pt-4 text-[24px] font-black tracking-tight text-[#16121F]">{b.h}</h2>
+              ) : b.list ? (
+                <ul key={i} className="space-y-2.5">
+                  {b.list.map((li, j) => (
+                    <li key={j} className="flex gap-3 text-[16.5px] leading-[1.7] text-[#3a3546]">
+                      <span className="mt-2.5 h-1.5 w-1.5 flex-none rounded-full" style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }} />
+                      <span>{li}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p key={i} className="text-[17px] leading-[1.75] text-[#3a3546]">{b.p}</p>
+              )
             )}
           </div>
         </div>
@@ -73,7 +86,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             {more.map((p) => (
               <Link key={p.slug} href={`/blog/${p.slug}`} className="group overflow-hidden rounded-2xl border border-[#ECEAF1] bg-white transition hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(20,18,28,.08)]">
-                <div className="aspect-[16/6]" style={{ background: p.gradient }} />
+                <BlogThumb post={p} className="aspect-[16/6]" />
                 <div className="p-5">
                   <div className="text-[12px] font-bold uppercase tracking-wide text-[#A435E8]">{p.category}</div>
                   <h3 className="mt-2 text-[18px] font-extrabold leading-snug tracking-tight text-[#16121F]">{p.title}</h3>

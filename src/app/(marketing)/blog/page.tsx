@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ArrowRight } from 'lucide-react';
 import { POSTS } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
+import { BlogThumb } from '@/components/marketing/BlogThumb';
 
 export const metadata: Metadata = {
   title: 'Blog',
@@ -31,7 +32,7 @@ export default function BlogPage() {
         <div className="mx-auto max-w-6xl px-5">
           {/* featured */}
           <Link href={`/blog/${lead.slug}`} className="group grid gap-8 rounded-3xl border border-[#ECEAF1] p-6 transition hover:shadow-[0_20px_50px_rgba(20,18,28,.08)] md:grid-cols-2 md:p-8">
-            <div className="aspect-[16/10] rounded-2xl" style={{ background: lead.gradient }} />
+            <BlogThumb post={lead} big className="aspect-[16/10] rounded-2xl" />
             <div className="flex flex-col justify-center">
               <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-[#A435E8]">{lead.category}<span className="text-[#9C97A8]">· {lead.readTime} read</span></div>
               <h2 className="mt-3 text-[26px] font-black leading-tight tracking-tight text-[#16121F] md:text-[30px]">{lead.title}</h2>
@@ -45,7 +46,7 @@ export default function BlogPage() {
           <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {rest.map((p) => (
               <Link key={p.slug} href={`/blog/${p.slug}`} className="group overflow-hidden rounded-2xl border border-[#ECEAF1] transition hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(20,18,28,.08)]">
-                <div className="aspect-[16/9]" style={{ background: p.gradient }} />
+                <BlogThumb post={p} className="aspect-[16/9]" />
                 <div className="p-5">
                   <div className="text-[12px] font-bold uppercase tracking-wide text-[#A435E8]">{p.category} · {p.readTime}</div>
                   <h3 className="mt-2 text-[18px] font-extrabold leading-snug tracking-tight text-[#16121F]">{p.title}</h3>
