@@ -1,6 +1,6 @@
 -- ============================================================================
--- BDOS — full database schema (run once in Supabase → SQL Editor)
--- Multi-project business-development OS. Every row is owner-scoped via RLS.
+-- Klientic — full database schema (run once in Supabase → SQL Editor)
+-- Multi-project client-acquisition OS. Every row is owner-scoped via RLS.
 -- ============================================================================
 
 create extension if not exists "pgcrypto";

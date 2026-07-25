@@ -68,6 +68,22 @@ function LoginInner() {
     }
   }
 
+  async function forgotPassword() {
+    if (!email) return toast.error('Enter your email above first');
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset`,
+      });
+      if (error) throw error;
+      toast.success('Password reset link sent — check your email.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not send reset link');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* hero */}
@@ -141,8 +157,14 @@ function LoginInner() {
               </div>
             </div>
             <div className="field !mb-0">
-              <label>Password</label>
-              <div className="relative">
+              <div className="flex items-center justify-between">
+                <label className="!mb-0">Password</label>
+                {mode === 'signin' && (
+                  <button type="button" onClick={forgotPassword} disabled={busy}
+                    className="text-[12px] font-bold text-accent hover:underline">Forgot password?</button>
+                )}
+              </div>
+              <div className="relative mt-1.5">
                 <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
                 <input className="input !pl-10" type="password" required minLength={6} value={password}
                   onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
