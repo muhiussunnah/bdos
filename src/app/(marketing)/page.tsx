@@ -7,11 +7,13 @@ import {
 import { FEATURES, STEPS, PROVIDERS_LOGOS, TESTIMONIALS, TIERS } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
 
+const HOME_TITLE = `${BRAND.name} — Find, win & keep clients on autopilot`;
 export const metadata: Metadata = {
-  title: `${BRAND.name} — Find, win & keep clients on autopilot`,
+  title: { absolute: HOME_TITLE },
   description: 'Klientic finds your ideal clients, writes the outreach, chases every follow-up and books the meetings — automatically. The all-in-one client acquisition engine.',
   alternates: { canonical: '/' },
-  openGraph: { url: '/' },
+  openGraph: { url: '/', title: HOME_TITLE },
+  twitter: { title: HOME_TITLE },
 };
 
 const JSON_LD = {
