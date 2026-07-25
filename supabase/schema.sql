@@ -209,6 +209,12 @@ create table if not exists public.activity_log (
 alter table public.activity_log enable row level security;
 create index if not exists activity_owner_idx on public.activity_log(owner_id, created_at desc);
 
+-- is_admin() must exist before the policies below reference it.
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+$$;
+
 -- ============================================================================
 -- RLS — owner-scoped. Each policy: the row's owner_id must equal auth.uid().
 -- ============================================================================
@@ -414,16 +420,20 @@ returns integer language sql stable security definer set search_path = public as
 $$;
 
 -- Avatars storage bucket (public read, owner-scoped writes by path).
+-- The bucket insert always works; the policies are wrapped so a permission
+-- quirk on storage.objects can never abort the rest of the schema.
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true)
   on conflict (id) do nothing;
-drop policy if exists avatars_read on storage.objects;
-create policy avatars_read on storage.objects for select using (bucket_id = 'avatars');
-drop policy if exists avatars_insert on storage.objects;
-create policy avatars_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
-drop policy if exists avatars_update on storage.objects;
-create policy avatars_update on storage.objects for update to authenticated
-  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
-drop policy if exists avatars_delete on storage.objects;
-create policy avatars_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+do $$
+begin
+  execute 'drop policy if exists avatars_read on storage.objects';
+  execute 'create policy avatars_read on storage.objects for select using (bucket_id = ''avatars'')';
+  execute 'drop policy if exists avatars_insert on storage.objects';
+  execute 'create policy avatars_insert on storage.objects for insert to authenticated with check (bucket_id = ''avatars'' and (storage.foldername(name))[1] = auth.uid()::text)';
+  execute 'drop policy if exists avatars_update on storage.objects';
+  execute 'create policy avatars_update on storage.objects for update to authenticated using (bucket_id = ''avatars'' and (storage.foldername(name))[1] = auth.uid()::text)';
+  execute 'drop policy if exists avatars_delete on storage.objects';
+  execute 'create policy avatars_delete on storage.objects for delete to authenticated using (bucket_id = ''avatars'' and (storage.foldername(name))[1] = auth.uid()::text)';
+exception when others then
+  raise notice 'Avatar storage policies skipped (%). If avatar upload fails, add them under Storage → avatars → Policies.', sqlerrm;
+end $$;
