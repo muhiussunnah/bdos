@@ -11,12 +11,12 @@ const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', displ
 
 const SITE = 'https://klientic.com';
 const DESC =
-  'Klientic finds your ideal clients, writes the outreach, chases every follow-up and books the meetings — automatically. The all-in-one client acquisition engine.';
+  'Stop chasing leads. Klientic finds your ideal clients, writes the outreach, chases every follow-up, and books the meetings — automatically. One won client pays for the year. Start free, no card.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: {
-    default: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    default: `${BRAND.name} — Win new clients while you sleep`,
     template: `%s · ${BRAND.name}`,
   },
   description: DESC,
@@ -31,12 +31,12 @@ export const metadata: Metadata = {
     siteName: BRAND.name,
     locale: 'en_US',
     url: SITE,
-    title: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    title: `${BRAND.name} — Win new clients while you sleep`,
     description: DESC,
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${BRAND.name} — Find, win & keep clients on autopilot`,
+    title: `${BRAND.name} — Win new clients while you sleep`,
     description: DESC,
   },
   icons: {

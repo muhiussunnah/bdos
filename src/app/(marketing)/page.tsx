@@ -8,13 +8,15 @@ import { FEATURES, STEPS, PROVIDERS_LOGOS, TESTIMONIALS, TIERS } from '@/lib/mar
 import { BRAND } from '@/lib/constants';
 import { HeroDashboard } from '@/components/marketing/HeroDashboard';
 
-const HOME_TITLE = `${BRAND.name} — Find, win & keep clients on autopilot`;
+const HOME_TITLE = `${BRAND.name} — Win new clients while you sleep`;
+const HOME_DESC =
+  'Stop chasing leads. Klientic finds your ideal clients, writes the outreach, chases every follow-up, and books the meetings — automatically. One won client pays for the year. Start free, no card.';
 export const metadata: Metadata = {
   title: { absolute: HOME_TITLE },
-  description: 'Klientic finds your ideal clients, writes the outreach, chases every follow-up and books the meetings — automatically. The all-in-one client acquisition engine.',
+  description: HOME_DESC,
   alternates: { canonical: '/' },
-  openGraph: { url: '/', title: HOME_TITLE },
-  twitter: { title: HOME_TITLE },
+  openGraph: { url: '/', title: HOME_TITLE, description: HOME_DESC },
+  twitter: { title: HOME_TITLE, description: HOME_DESC },
 };
 
 const JSON_LD = {
@@ -25,7 +27,7 @@ const JSON_LD = {
       name: 'Klientic',
       url: 'https://klientic.com',
       logo: 'https://klientic.com/favicon.svg',
-      description: 'The all-in-one client acquisition engine.',
+      description: 'Klientic wins new clients on autopilot — it finds your ideal clients, writes the outreach, chases every follow-up, and books the meetings while you sleep.',
     },
     {
       '@type': 'WebSite',
