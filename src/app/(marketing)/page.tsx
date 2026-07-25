@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { FEATURES, STEPS, PROVIDERS_LOGOS, TESTIMONIALS, TIERS } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
+import { HeroDashboard } from '@/components/marketing/HeroDashboard';
 
 const HOME_TITLE = `${BRAND.name} — Find, win & keep clients on autopilot`;
 export const metadata: Metadata = {
@@ -102,7 +103,7 @@ function Hero() {
         {/* floating product visual */}
         <div className="relative mx-auto mt-16 max-w-5xl">
           <div className="anim-float">
-            <DashboardPreview />
+            <HeroDashboard />
           </div>
           {/* satellite cards */}
           <FloatCard className="anim-float2 -left-4 top-16 hidden md:flex md:-left-10" delay="1s"
@@ -345,47 +346,6 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
       <div className="text-[13px] font-bold uppercase tracking-wider text-[#A435E8]">{eyebrow}</div>
       <h2 className="mt-3 text-[30px] font-black leading-tight tracking-tight text-[#16121F] md:text-[42px]">{title}</h2>
       {sub && <p className="mt-4 text-[16px] leading-relaxed text-[#6A6478]">{sub}</p>}
-    </div>
-  );
-}
-
-function DashboardPreview() {
-  const stages = [['New', 42], ['Contacted', 28], ['Follow-up', 19], ['Positive', 11], ['Meeting', 6]] as const;
-  const max = 42;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_50px_140px_rgba(0,0,0,.6)]">
-      <div className="flex items-center gap-2 border-b border-[#ECEAF1] bg-[#FBFAFD] px-4 py-3">
-        <span className="h-3 w-3 rounded-full bg-[#E5484D]" /><span className="h-3 w-3 rounded-full bg-[#E08C1F]" /><span className="h-3 w-3 rounded-full bg-[#16A34A]" />
-        <span className="ml-3 text-[12px] font-semibold text-[#9C97A8]">app.klientic.com — Dashboard</span>
-      </div>
-      <div className="grid grid-cols-[150px_1fr] text-left">
-        <div className="hidden flex-col gap-1 p-3 sm:flex" style={{ background: '#0E0916' }}>
-          {['Dashboard', 'Autopilot', 'Leads', 'Outreach', 'Inbox', 'Reports'].map((n, i) => (
-            <div key={n} className={`rounded-lg px-3 py-2 text-[12px] font-semibold ${i === 0 ? 'bg-white/10 text-white' : 'text-white/50'}`}>{n}</div>
-          ))}
-        </div>
-        <div className="p-5">
-          <div className="grid grid-cols-3 gap-3">
-            {[['Pipeline', '106'], ['Positive', '11'], ['Sent', '284']].map(([l, v]) => (
-              <div key={l} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
-                <div className="text-[11px] font-semibold text-[#6A6478]">{l}</div>
-                <div className="mt-1 text-[22px] font-black text-[#16121F]" style={{ fontFamily: 'var(--font-mono)' }}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 rounded-xl border border-[#ECEAF1] bg-white p-4">
-            <div className="mb-3 text-[12px] font-bold text-[#16121F]">Lead pipeline</div>
-            <div className="flex items-end gap-3" style={{ height: 90 }}>
-              {stages.map(([name, n]) => (
-                <div key={name} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div className="w-full rounded-md" style={{ height: `${(n / max) * 100}%`, background: 'linear-gradient(180deg,#A435E8,#E0457E)' }} />
-                  <span className="text-[10px] font-semibold text-[#9C97A8]">{name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
