@@ -106,7 +106,7 @@ function Hero() {
             <HeroDashboard />
           </div>
           {/* satellite cards */}
-          <FloatCard className="anim-float2 -left-4 top-16 hidden md:flex md:-left-10" delay="1s"
+          <FloatCard className="anim-float2 -left-3 -top-5 hidden md:flex md:-left-8" delay="1s"
             icon={<CheckCircle2 size={16} className="text-[#16A34A]" />} title="New lead scored 94" sub="Nordic Trampoline AB · Priority A" />
           <FloatCard className="anim-float -right-4 top-8 hidden md:flex md:-right-12" delay="0s"
             icon={<Sparkles size={16} className="text-[#A435E8]" />} title="Reply classified: Positive" sub="Draft ready · needs your approval" />
