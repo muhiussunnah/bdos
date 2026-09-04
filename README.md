@@ -13,6 +13,8 @@ and businesses as you run.
 - **Lead discovery agent** — find fitting organisations, auto-scored on Fit & Opportunity (A/B/C priority).
 - **Outreach engine** — personal, human-sounding email, written in each project's language.
 - **Follow-up engine** — automatic 3 / 7 / 21-day cadence (configurable per project).
+- **Bring your own lists** — import a CSV (Excel, Sheets, Apollo, LinkedIn exports…) with auto column mapping; imported leads join the same pipeline and automation.
+- **Manual sending** — a Gmail-style composer (To / Cc / Bcc / attachments, pick a lead or any address) and a bulk sender for CSV lists or selected leads with `{{first_name}}` / `{{company}}` placeholders. Manual sends are logged next to the agent's, and can hand the lead to automated follow-ups.
 - **Inbox intelligence** — every reply auto-classified; safe replies drafted, sensitive ones flagged for a human.
 - **Sales-manager call list** — a prioritized daily task list built from the live pipeline.
 - **Meeting prep** — company summary, talking points and objections in under 60 seconds.

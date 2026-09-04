@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
+import { ImportLeadsModal } from '@/components/ImportLeadsModal';
 import type { Lead } from '@/lib/types';
 
 const FILTERS = [
@@ -15,6 +16,7 @@ const FILTERS = [
   { key: 'new', label: 'New' },
   { key: 'active', label: 'Active' },
   { key: 'positive', label: 'Won / Positive' },
+  { key: 'import', label: 'Imported' },
 ];
 
 function LeadsInner() {
@@ -27,6 +29,7 @@ function LeadsInner() {
   const [active, setActive] = useState<Lead | null>(null);
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -37,7 +40,7 @@ function LeadsInner() {
   }, [project, supabase]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (params.get('discover')) setDiscoverOpen(true); }, [params]);
+  useEffect(() => { if (params.get('discover')) setDiscoverOpen(true); if (params.get('import')) setImportOpen(true); }, [params]);
 
   const filtered = leads.filter((l) => {
     if (q && !`${l.company_name} ${l.contact_name} ${l.industry} ${l.location}`.toLowerCase().includes(q.toLowerCase())) return false;
@@ -45,6 +48,7 @@ function LeadsInner() {
     if (filter === 'new') return l.stage === 'new';
     if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
     if (filter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
+    if (filter === 'import') return l.source === 'import';
     return true;
   });
 
@@ -67,6 +71,7 @@ function LeadsInner() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter…" className="w-32 bg-transparent text-[13px] outline-none text-ink" />
           </div>
           <button onClick={() => setManualOpen(true)} className="btn btn-ghost"><Plus size={15} /> Add</button>
+          <button onClick={() => setImportOpen(true)} className="btn btn-ghost"><Upload size={15} /> <span className="hidden sm:inline">Import list</span><span className="sm:hidden">Import</span></button>
           <button onClick={() => setDiscoverOpen(true)} className="btn btn-accent"><Sparkles size={15} /> Find with AI</button>
         </div>
       </div>
@@ -76,8 +81,11 @@ function LeadsInner() {
           <div className="p-6"><Thinking label="Loading leads…" /></div>
         ) : filtered.length === 0 ? (
           <EmptyState icon={<Users size={38} />} title="No leads here yet"
-            sub='Use "Find with AI" to fill the pipeline, or add one manually.'
-            action={<button onClick={() => setDiscoverOpen(true)} className="btn btn-accent"><Sparkles size={15} /> Find leads with AI</button>} />
+            sub='Use "Find with AI" to fill the pipeline, import a list you already have, or add one manually.'
+            action={<div className="flex flex-wrap justify-center gap-2">
+              <button onClick={() => setImportOpen(true)} className="btn btn-ghost"><Upload size={15} /> Import my list</button>
+              <button onClick={() => setDiscoverOpen(true)} className="btn btn-accent"><Sparkles size={15} /> Find leads with AI</button>
+            </div>} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
@@ -90,7 +98,9 @@ function LeadsInner() {
                 {filtered.map((l) => (
                   <tr key={l.id} onClick={() => setActive(l)} className="cursor-pointer transition hover:bg-surface-2">
                     <td className="td">
-                      <div className="font-bold text-ink">{l.company_name}</div>
+                      <div className="flex items-center gap-1.5 font-bold text-ink">{l.company_name}
+                        {l.source === 'import' && <span className="rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">Imported</span>}
+                      </div>
                       {l.website && <div className="text-[11.5px] text-faint">{l.website.replace(/^https?:\/\//, '')}</div>}
                     </td>
                     <td className="td text-dim">{l.industry || '—'}</td>
@@ -113,6 +123,7 @@ function LeadsInner() {
 
       <DiscoverModal open={discoverOpen} onClose={() => setDiscoverOpen(false)} onDone={() => { load(); }} />
       <ManualModal open={manualOpen} onClose={() => setManualOpen(false)} onDone={load} />
+      <ImportLeadsModal open={importOpen} onClose={() => setImportOpen(false)} onDone={load} />
       <LeadDrawer lead={active} onClose={() => setActive(null)} onChange={() => { load(); refreshCounts(); }} />
     </div>
   );

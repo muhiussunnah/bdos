@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy } from 'lucide-react';
+import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
+import { ComposeModal } from '@/components/ComposeModal';
 import { STAGES } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
@@ -16,8 +17,9 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
   const [draft, setDraft] = useState<{ subject: string; body: string; step: number } | null>(null);
   const [prep, setPrep] = useState<Prep | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [compose, setCompose] = useState(false);
 
-  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); }, [lead?.id]);
+  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); setCompose(false); }, [lead?.id]);
 
   if (!lead) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;
 
@@ -161,10 +163,16 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
               <p className="hint">Sends via your Resend sender. To: {lead.email || '⚠ no email on this lead'}</p>
             </>
           ) : (
-            <button onClick={generate} className="btn btn-accent w-full justify-center"><Sparkles size={15} /> Generate email <ArrowRight size={15} /></button>
+            <>
+              <button onClick={generate} className="btn btn-accent w-full justify-center"><Sparkles size={15} /> Generate email <ArrowRight size={15} /></button>
+              <button onClick={() => setCompose(true)} className="btn btn-ghost w-full justify-center"><PenLine size={15} /> Write it myself (attachments, Cc)</button>
+              <p className="hint text-center">Either way the lead moves to Contacted and the agent can take over follow-ups.</p>
+            </>
           )}
         </div>
       )}
+
+      <ComposeModal open={compose} lead={lead} onClose={() => setCompose(false)} onSent={() => { onChange(); onClose(); }} />
 
       {tab === 'prep' && (
         <div className="space-y-3">

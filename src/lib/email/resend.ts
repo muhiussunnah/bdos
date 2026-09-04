@@ -1,12 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+export interface Attachment {
+  filename: string;
+  /** base64-encoded file content */
+  content: string;
+  contentType?: string;
+}
+
 export interface SendArgs {
-  to: string;
+  to: string | string[];
   subject: string;
   html?: string;
   text?: string;
   from: string;
   replyTo?: string;
+  cc?: string[];
+  bcc?: string[];
+  attachments?: Attachment[];
   apiKey: string;
 }
 
@@ -21,11 +31,16 @@ export async function sendEmail(args: SendArgs): Promise<{ id: string }> {
     },
     body: JSON.stringify({
       from: args.from,
-      to: [args.to],
+      to: Array.isArray(args.to) ? args.to : [args.to],
       subject: args.subject,
       ...(args.html ? { html: args.html } : {}),
       ...(args.text ? { text: args.text } : {}),
       ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+      ...(args.cc?.length ? { cc: args.cc } : {}),
+      ...(args.bcc?.length ? { bcc: args.bcc } : {}),
+      ...(args.attachments?.length
+        ? { attachments: args.attachments.map((a) => ({ filename: a.filename, content: a.content, ...(a.contentType ? { content_type: a.contentType } : {}) })) }
+        : {}),
     }),
   });
   if (!res.ok) {
@@ -55,4 +70,38 @@ export function textToHtml(text: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.6;color:#16121F">${esc.replace(/\n/g, '<br>')}</div>`;
+}
+
+/** Max total attachment payload we accept per email (Resend allows 40MB; keep headroom for base64). */
+export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+
+/** Base64-encode a File in an edge runtime (no Buffer). */
+export async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+/** Collect every `files` entry from a multipart form into Resend attachments. */
+export async function attachmentsFromForm(form: FormData, field = 'files'): Promise<Attachment[]> {
+  const files = form.getAll(field).filter((f): f is File => f instanceof File && f.size > 0);
+  const total = files.reduce((s, f) => s + f.size, 0);
+  if (total > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`Attachments are too large (${(total / 1048576).toFixed(1)}MB). Keep the total under ${MAX_ATTACHMENT_BYTES / 1048576}MB.`);
+  }
+  const out: Attachment[] = [];
+  for (const f of files) {
+    out.push({ filename: f.name, content: await fileToBase64(f), contentType: f.type || undefined });
+  }
+  return out;
+}
+
+/** Split a comma / semicolon / newline separated address list. */
+export function parseAddressList(v?: string | null): string[] {
+  if (!v) return [];
+  return v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
 }
