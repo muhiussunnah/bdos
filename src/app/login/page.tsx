@@ -24,6 +24,8 @@ function LoginInner() {
     const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
     const msg = (raw || '').trim();
     if (!msg || msg === '{}' || msg === '[object Object]') return fallback;
+    if (/failed to fetch|networkerror|network request failed|load failed|fetch failed|ERR_NAME_NOT_RESOLVED|ECONNREFUSED/i.test(msg))
+      return 'We can’t reach the server right now. Check your connection and try again in a moment.';
     if (/error sending|smtp|recovery email|confirmation email|magic link/i.test(msg))
       return 'We couldn’t send the email — your email provider looks misconfigured. Please try again shortly.';
     return msg;

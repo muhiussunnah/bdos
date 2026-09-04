@@ -80,6 +80,10 @@ After deploying, add the Vercel URL to **Supabase → Authentication → URL Con
 To make follow-ups and reports hands-free, add a **Vercel Cron Job** that hits
 `/api/followups/run` and `/api/reports/daily` each morning.
 
+`vercel.json` already schedules a daily call to `/api/health`. It runs a tiny query against the
+database so a free-tier Supabase project never goes idle and gets paused (a paused project makes
+every sign-in fail with "Failed to fetch"). Hit `/api/health` any time to check backend status.
+
 ### Cloudflare Pages (alternative)
 
 Add the `@cloudflare/next-on-pages` adapter and a build/deploy script, set the same environment
