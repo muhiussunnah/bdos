@@ -105,3 +105,37 @@ export function parseAddressList(v?: string | null): string[] {
   if (!v) return [];
   return v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
 }
+
+export interface ReceivedEmail {
+  id: string;
+  from: string;
+  to: string[];
+  subject: string | null;
+  html: string | null;
+  text: string | null;
+  message_id?: string | null;
+  headers?: Record<string, string>;
+  attachments?: { id: string; filename: string; content_type?: string; size?: number }[];
+}
+
+/** Fetch a received (inbound) email from Resend by id. */
+export async function getReceivedEmail(apiKey: string, id: string): Promise<ReceivedEmail> {
+  const res = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`Resend ${res.status}`);
+  return res.json();
+}
+
+/** Very small HTML → text for inbound bodies (no DOM in the edge runtime). */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n')
+    .trim();
+}

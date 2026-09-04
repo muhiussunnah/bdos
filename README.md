@@ -82,6 +82,14 @@ After deploying, add the Vercel URL to **Supabase → Authentication → URL Con
 To make follow-ups and reports hands-free, add a **Vercel Cron Job** that hits
 `/api/followups/run` and `/api/reports/daily` each morning.
 
+**Receiving replies automatically (Resend Inbound).** Enable *Receiving* on your domain in
+Resend → Domains, add the MX record it shows to your DNS, then create a webhook in Resend →
+Webhooks with endpoint `https://<your-app>/api/inbox/webhook` and the `email.received` event.
+Replies to your sending address (Settings → Email → From address) land in the Inbox, get linked to
+the lead and are classified by the agent. Optionally set `RESEND_WEBHOOK_SECRET` (the webhook's
+signing secret) on Vercel to also verify Svix signatures; without it the route authenticates events
+by fetching the email from the owner's own Resend account.
+
 `vercel.json` already schedules a daily call to `/api/health`. It runs a tiny query against the
 database so a free-tier Supabase project never goes idle and gets paused (a paused project makes
 every sign-in fail with "Failed to fetch"). Hit `/api/health` any time to check backend status.
