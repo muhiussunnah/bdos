@@ -153,23 +153,30 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   }, [currentPx]);
   const inEditorRef = useRef<(() => boolean) | null>(null);
 
+  const applying = useRef(false);
   function applyFontSize(px: number) {
-    const size = Math.round(Math.min(96, Math.max(6, px)));
-    restoreSelection();
-    const wasRange = !!savedRange.current && !savedRange.current.collapsed;
-    pendingPx.current = size;
-    document.execCommand('styleWithCSS', false, 'false');
-    document.execCommand('fontSize', false, '7');
-    const created = normaliseFonts();
-    // keep the text selected so the user can keep styling it (bold, colour, another size…)
-    if (wasRange && created.length) {
-      const r = document.createRange();
-      r.setStartBefore(created[0]); r.setEndAfter(created[created.length - 1]);
-      const s = window.getSelection(); s?.removeAllRanges(); s?.addRange(r);
-      savedRange.current = r.cloneRange();
-    }
-    setSizeText(String(size));
-    emit(); force((n) => n + 1);
+    if (applying.current) return;
+    applying.current = true;
+    try {
+      const size = Math.round(Math.min(96, Math.max(6, px)));
+      restoreSelection();
+      const wasRange = !!savedRange.current && !savedRange.current.collapsed;
+      pendingPx.current = size;
+      document.execCommand('styleWithCSS', false, 'false');
+      document.execCommand('fontSize', false, '7');
+      const created = normaliseFonts();
+      // keep the text selected so the user can keep styling it (bold, another size…);
+      // re-apply after the focus/blur churn of the size box has settled
+      if (wasRange && created.length) {
+        const r = document.createRange();
+        r.setStartBefore(created[0]); r.setEndAfter(created[created.length - 1]);
+        savedRange.current = r.cloneRange();
+        const select = () => { ed.current?.focus(); const s = window.getSelection(); s?.removeAllRanges(); s?.addRange(r); };
+        select(); setTimeout(select, 0);
+      }
+      setSizeText(String(size));
+      emit(); force((n) => n + 1);
+    } finally { applying.current = false; }
   }
 
   function fontStep(delta: number) {
@@ -270,7 +277,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
             onMouseDown={() => saveSelection()} onFocus={() => { sizeEditing.current = true; }}
             onChange={(e) => setSizeText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitSizeText(); } if (e.key === 'Escape') { sizeEditing.current = false; setSizeText(String(currentPx())); ed.current?.focus(); } }}
-            onBlur={() => { if (!sizeOpen) commitSizeText(); }}
+            onBlur={() => { if (!sizeOpen && !applying.current) commitSizeText(); else sizeEditing.current = false; }}
             className="h-8 w-11 rounded-l-lg border border-line bg-surface px-1.5 text-center text-[12.5px] font-bold text-ink outline-none focus:border-accent" />
           <button type="button" title="Pick a font size" aria-label="Pick a font size" aria-expanded={sizeOpen}
             onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => setSizeOpen((v) => !v)}
