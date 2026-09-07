@@ -161,29 +161,34 @@ function LeadsInner() {
                     <tr key={l.id} onClick={() => setActive(l)} className={`group cursor-pointer transition hover:bg-surface-2 ${sel.has(l.id) ? 'bg-[var(--accent-soft)]' : ''}`}>
                       <td className="td !pr-0"><Checkbox checked={sel.has(l.id)} onChange={() => sel.toggle(l.id)} label={`Select ${l.company_name}`} /></td>
                       <td className="td">
-                        <div className="flex items-center gap-1.5 font-bold text-ink">{l.company_name}
-                          {l.source === 'import' && <span className="rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">Imported</span>}
+                        <div className="w-[240px] max-w-[240px]">
+                          <div className="flex items-center gap-1.5 font-bold text-ink">
+                            <span className="truncate" title={l.company_name}>{l.company_name}</span>
+                            {l.source === 'import' && <span className="flex-none rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">Imported</span>}
+                          </div>
+                          {l.website && <div className="truncate text-[11.5px] text-faint" title={l.website}>{l.website.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')}</div>}
                         </div>
-                        {l.website && <div className="text-[11.5px] text-faint">{l.website.replace(/^https?:\/\//, '')}</div>}
                       </td>
-                      <td className="td text-dim">{l.industry || '—'}</td>
-                      <td className="td text-dim">{l.location || '—'}</td>
-                      <td className="td">
+                      <td className="td text-dim"><div className="max-w-[140px] truncate" title={l.industry || ''}>{l.industry || '—'}</div></td>
+                      <td className="td text-dim"><div className="max-w-[140px] truncate" title={l.location || ''}>{l.location || '—'}</div></td>
+                      <td className="td min-w-[230px]">
                         {l.email ? (
-                          <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">
-                            <Mail size={12} className="flex-none text-faint" /><span className="truncate">{l.email}</span>
+                          <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()} title={l.email} className="flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">
+                            <Mail size={12} className="flex-none text-faint" /><span>{l.email}</span>
                           </a>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>no email</span>
                         )}
                       </td>
-                      <td className="td"><Score value={l.fit_score} /></td>
-                      <td className="td"><Score value={l.opportunity_score} /></td>
-                      <td className="td"><PriorityTag p={l.priority} /></td>
-                      <td className="td"><StageTag stage={l.stage} /></td>
+                      <td className="td whitespace-nowrap"><Score value={l.fit_score} /></td>
+                      <td className="td whitespace-nowrap"><Score value={l.opportunity_score} /></td>
+                      <td className="td whitespace-nowrap"><PriorityTag p={l.priority} /></td>
+                      <td className="td whitespace-nowrap"><StageTag stage={l.stage} /></td>
                       <td className="td">
-                        {l.contact_name ? <div className="font-semibold text-ink">{l.contact_name}</div> : <span className="text-faint">—</span>}
-                        {l.role && <div className="text-[11.5px] text-faint">{l.role}</div>}
+                        <div className="max-w-[180px]">
+                          {l.contact_name ? <div className="truncate font-semibold text-ink" title={l.contact_name}>{l.contact_name}</div> : <span className="text-faint">—</span>}
+                          {l.role && <div className="truncate text-[11.5px] text-faint" title={l.role}>{l.role}</div>}
+                        </div>
                       </td>
                       <td className="td whitespace-nowrap text-[12px] text-faint">{new Date(l.created_at).toLocaleDateString()}</td>
                       <td className="td !pl-0">

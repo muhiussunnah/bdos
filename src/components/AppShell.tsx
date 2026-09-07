@@ -11,7 +11,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <main className="relative overflow-y-auto">
         <Topbar onMenu={() => setOpen(true)} />
-        <div className="mx-auto max-w-[1180px] px-4 pb-16 pt-7 md:px-[30px]">{children}</div>
+        <div className="mx-auto max-w-[1680px] px-4 pb-16 pt-7 md:px-[30px]">{children}</div>
       </main>
     </div>
   );
