@@ -8,6 +8,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { ImportLeadsModal } from '@/components/ImportLeadsModal';
+import { TagInput } from '@/components/TagInput';
 import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, ConfirmDialog, useSort, sortBy, SortTh } from '@/components/listing';
 import { STAGES } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
@@ -211,46 +212,81 @@ function LeadsInner() {
   );
 }
 
+const COUNTRIES = ['Sweden', 'Norway', 'Denmark', 'Finland', 'Iceland', 'Germany', 'Netherlands', 'Belgium', 'France', 'Spain', 'Italy', 'Portugal', 'Austria', 'Switzerland', 'Poland', 'Czech Republic', 'Ireland', 'United Kingdom', 'United States', 'Canada', 'Australia', 'New Zealand', 'United Arab Emirates', 'Saudi Arabia', 'India', 'Bangladesh', 'Pakistan', 'Singapore', 'Malaysia', 'Japan', 'South Korea', 'Brazil', 'Mexico', 'South Africa', 'Nigeria', 'Kenya', 'Egypt', 'Turkey'];
+const LS_GEO = 'klientic.discover.geo';
+
 function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { project } = useApp();
-  const [category, setCategory] = useState('');
-  const [area, setArea] = useState('');
+  const [country, setCountry] = useState('');
+  const [region, setRegion] = useState('');
+  const [subcity, setSubcity] = useState('');
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
 
+  // remember the last geography so repeated searches are one click
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const g = JSON.parse(localStorage.getItem(LS_GEO) || 'null');
+      if (g) { setCountry(g.country || ''); setRegion(g.region || ''); setSubcity(g.subcity || ''); }
+    } catch { /* ignore */ }
+  }, [open]);
+
   async function run() {
-    if (!project || !category) return toast.error('Enter a category');
+    if (!project) return;
+    if (!keywords.length) return toast.error('Add at least one keyword or niche');
+    if (!country.trim()) return toast.error('Pick a country');
     setBusy(true);
     try {
+      try { localStorage.setItem(LS_GEO, JSON.stringify({ country, region, subcity })); } catch { /* ignore */ }
       const res = await fetch('/api/leads/discover', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, category, area, count }),
+        body: JSON.stringify({ projectId: project.id, categories: keywords, country: country.trim(), region: region.trim(), subcity: subcity.trim(), count }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(`${data.count} leads added to the pipeline`);
-      onDone(); onClose(); setCategory(''); setArea('');
+      onDone(); onClose(); setKeywords([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Discovery failed');
     } finally { setBusy(false); }
   }
 
+  const where = [subcity, region, country].map((s) => s.trim()).filter(Boolean).join(', ');
+
   return (
     <Modal open={open} onClose={onClose} title="Find leads with AI">
       <p className="mb-4 text-[13px] text-dim">The agent searches for organisations that fit {project?.name}, scores each on fit &amp; opportunity, and drops them into your pipeline.</p>
-      <div className="field"><label>Category</label>
-        <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Trampoline park, Museum, SaaS agency" /></div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="field"><label>Area / region</label>
-          <input className="input" value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Stockholm, Nordics" /></div>
-        <div className="field"><label>How many</label>
-          <input className="input" type="number" min={1} max={25} value={count} onChange={(e) => setCount(Number(e.target.value))} /></div>
+
+      <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-faint">Where</div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="field !mb-0"><label>Country *</label>
+          <input className="input" list="discover-countries" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Sweden" autoComplete="off" />
+          <datalist id="discover-countries">{COUNTRIES.map((c) => <option key={c} value={c} />)}</datalist></div>
+        <div className="field !mb-0"><label>Region / city</label>
+          <input className="input" value={region} onChange={(e) => setRegion(e.target.value)} placeholder="e.g. Stockholm" /></div>
+        <div className="field !mb-0"><label>Sub-city / area <span className="text-faint">(optional)</span></label>
+          <input className="input" value={subcity} onChange={(e) => setSubcity(e.target.value)} placeholder="e.g. Sigtuna, Vallentuna" /></div>
       </div>
-      {busy && <Thinking label={`Searching for ${category || 'leads'}…`} />}
-      <div className="mt-2 flex justify-end gap-2">
+
+      <div className="mb-1.5 mt-4 text-[11px] font-bold uppercase tracking-wide text-faint">What</div>
+      <div className="field"><label>Keywords / categories / niches *</label>
+        <TagInput value={keywords} onChange={setKeywords} placeholder="Type a niche and press Enter — e.g. Trampoline park, Museum, Padel club" />
+        <p className="hint">Press <b>Enter</b> or type a <b>comma</b> to add each one. Paste a comma-separated list to add many at once. The agent spreads results across all niches.</p></div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="field !mb-0"><label>How many leads</label>
+          <input className="input" type="number" min={1} max={25} value={count} onChange={(e) => setCount(Number(e.target.value))} /></div>
+        <div className="field !mb-0"><label>Search summary</label>
+          <div className="input !bg-surface-2 text-[12.5px] text-dim">{keywords.length ? keywords.join(' · ') : '—'}{where ? ` in ${where}` : ''}</div></div>
+      </div>
+
+      {busy && <div className="mt-3"><Thinking label={`Searching ${where || 'everywhere'} for ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? '…' : ''}`} /></div>}
+      <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="btn btn-ghost">Cancel</button>
         <button onClick={run} disabled={busy} className="btn btn-accent">
-          {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Search
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Find {count} leads
         </button>
       </div>
     </Modal>

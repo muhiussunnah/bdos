@@ -20,12 +20,28 @@ export function projectContext(p: Project, knowledge?: string) {
 }
 
 // ── Lead discovery ──────────────────────────────────────────────────────────
-export function discoveryPrompt(p: Project, category: string, area: string, count: number, knowledge?: string) {
+export interface DiscoveryGeo { country?: string; region?: string; subcity?: string }
+
+/** Human-readable "Sigtuna, Stockholm, Sweden" style location from the structured fields. */
+export function describeGeo(g: DiscoveryGeo): string {
+  return [g.subcity, g.region, g.country].map((s) => (s || '').trim()).filter(Boolean).join(', ') || 'anywhere';
+}
+
+export function discoveryPrompt(p: Project, categories: string[], geo: DiscoveryGeo, count: number, knowledge?: string) {
+  const cats = categories.map((c) => c.trim()).filter(Boolean);
+  const catText = cats.length > 1 ? `these categories / niches: ${cats.map((c) => `"${c}"`).join(', ')}` : `"${cats[0] || 'relevant'}"`;
+  const where = describeGeo(geo);
+  const geoRules = [
+    geo.country && `Country: ${geo.country} — every lead MUST be located in this country.`,
+    geo.region && `Region / city: ${geo.region} — leads must be in or right next to it.`,
+    geo.subcity && `Preferred locality: ${geo.subcity} — prioritise organisations physically located there before widening to the rest of ${geo.region || geo.country}.`,
+  ].filter(Boolean).join('\n');
   return {
     system: `${projectContext(p, knowledge)}
 
-You are a lead-research agent. Find real, plausible ${category} organisations in/near ${area} that would be a strong fit as customers or partners. For each, estimate a Fit Score (1-100, how well they match our ideal customer) and an Opportunity Score (1-100, likelihood & value of a deal). Prefer specific, named, findable organisations over generic placeholders.`,
-    user: `Return ${count} leads as strict JSON: {"leads":[{"company_name","website","industry","location","contact_name","role","email","phone","linkedin_url","reason","fit_score","opportunity_score"}]}. Use null for anything you genuinely don't know — never fabricate emails or phone numbers. "reason" = one sentence on why they are relevant to us. Category: ${category}. Area: ${area}.`,
+You are a lead-research agent. Find real, plausible organisations matching ${catText} in/near ${where} that would be a strong fit as customers or partners. For each, estimate a Fit Score (1-100, how well they match our ideal customer) and an Opportunity Score (1-100, likelihood & value of a deal). Prefer specific, named, findable organisations over generic placeholders.${cats.length > 1 ? ' Spread the results across the categories so each niche is represented.' : ''}
+${geoRules}`,
+    user: `Return ${count} leads as strict JSON: {"leads":[{"company_name","website","industry","location","contact_name","role","email","phone","linkedin_url","reason","fit_score","opportunity_score"}]}. Use null for anything you genuinely don't know — never fabricate emails or phone numbers. "location" must be the town + country. "industry" should name which of the requested categories the lead belongs to. "reason" = one sentence on why they are relevant to us. Categories: ${cats.join(', ') || 'relevant'}. Location: ${where}.`,
   };
 }
 
