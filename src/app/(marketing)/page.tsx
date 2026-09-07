@@ -7,6 +7,7 @@ import {
 import { FEATURES, STEPS, PROVIDERS_LOGOS, TESTIMONIALS, TIERS } from '@/lib/marketing';
 import { BRAND } from '@/lib/constants';
 import { HeroDashboard } from '@/components/marketing/HeroDashboard';
+import { AuthCta } from '@/components/marketing/AuthCta';
 
 const HOME_TITLE = `${BRAND.name} — Win new clients while you sleep`;
 const HOME_DESC =
@@ -89,10 +90,10 @@ function Hero() {
         </p>
 
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link href="/login" className="group inline-flex items-center gap-2 rounded-[14px] px-7 py-4 text-[15px] font-bold text-white transition hover:-translate-y-0.5"
+          <AuthCta className="group inline-flex items-center gap-2 rounded-[14px] px-7 py-4 text-[15px] font-bold text-white transition hover:-translate-y-0.5"
             style={{ background: 'linear-gradient(135deg,#B44BF0,#A435E8 45%,#E0457E)', boxShadow: '0 10px 34px rgba(164,53,232,.5)' }}>
             Start free — no card <ArrowRight size={17} className="transition group-hover:translate-x-0.5" />
-          </Link>
+          </AuthCta>
           <Link href="/features" className="rounded-[14px] border border-white/15 bg-white/5 px-7 py-4 text-[15px] font-bold text-white backdrop-blur transition hover:bg-white/10">See how it works</Link>
         </div>
 
@@ -332,10 +333,10 @@ function FinalCta() {
         <div className="pointer-events-none absolute left-1/2 top-0 h-64 w-96 -translate-x-1/2 rounded-full anim-glow" style={{ background: 'radial-gradient(circle, rgba(164,53,232,.55), transparent 60%)' }} />
         <h2 className="relative mx-auto max-w-2xl text-[32px] font-black leading-tight tracking-tight md:text-[46px]">Your competitors are still following up by hand.</h2>
         <p className="relative mx-auto mt-4 max-w-xl text-[16px] text-white/65">Set up your first project in minutes. Wake up to a pipeline that filled itself overnight.</p>
-        <Link href="/login" className="relative mt-8 inline-flex items-center gap-2 rounded-[14px] px-8 py-4 text-[15px] font-bold text-white transition hover:-translate-y-0.5"
+        <AuthCta className="relative mt-8 inline-flex items-center gap-2 rounded-[14px] px-8 py-4 text-[15px] font-bold text-white transition hover:-translate-y-0.5"
           style={{ background: 'linear-gradient(135deg,#B44BF0,#A435E8 45%,#E0457E)', boxShadow: '0 10px 34px rgba(164,53,232,.5)' }}>
           Start free — no card <ArrowRight size={17} />
-        </Link>
+        </AuthCta>
       </div>
     </section>
   );
