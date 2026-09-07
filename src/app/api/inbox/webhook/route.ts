@@ -71,6 +71,9 @@ export async function POST(req: Request) {
   if (!sender) return ignore('no sender');
   // never loop on our own bounces / auto-replies from ourselves
   if (recipients.includes(sender)) return ignore('self-addressed');
+  // skip machine mail that is never a prospect reply (DMARC aggregate reports,
+  // mailer-daemon bounces, newsletter blasts to the support address)
+  if (isAutomatedSender(sender, mail.subject || event.data.subject || '')) return ignore('automated sender');
 
   // 3. link to a lead (most recently contacted first)
   const { data: leadRows } = await admin.from('leads').select('*').eq('owner_id', owner).ilike('email', sender)
@@ -141,6 +144,14 @@ export async function GET() {
 function extractAddress(v: string): string {
   const m = v.match(/<([^>]+)>/);
   return (m ? m[1] : v).trim().toLowerCase();
+}
+
+function isAutomatedSender(sender: string, subject: string): boolean {
+  const local = sender.split('@')[0] || '';
+  if (/^(no-?reply|noreply-[\w-]*|do-?not-?reply|mailer-daemon|postmaster|bounces?|dmarc[\w-]*|abuse|notifications?)$/i.test(local)) return true;
+  if (/-replies@|^noreply-dmarc|dmarc-support|marketing-email/i.test(sender)) return true;
+  if (/^report domain:/i.test(subject)) return true;
+  return false;
 }
 
 function pickOwner(rows: { owner_id: string; from_email: string }[], recipients: string[]): string | null {

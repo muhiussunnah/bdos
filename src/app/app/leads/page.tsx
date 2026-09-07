@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { ImportLeadsModal } from '@/components/ImportLeadsModal';
+import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, ConfirmDialog, useSort, sortBy, SortTh } from '@/components/listing';
+import { STAGES } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
 const FILTERS = [
@@ -18,6 +20,9 @@ const FILTERS = [
   { key: 'positive', label: 'Won / Positive' },
   { key: 'import', label: 'Imported' },
 ];
+
+type SortKey = 'company_name' | 'industry' | 'location' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
+const STAGE_ORDER = ['new', 'contacted', 'followup1', 'followup2', 'followup3', 'positive', 'meeting', 'closed', 'lost'];
 
 function LeadsInner() {
   const { project, supabase, refreshCounts } = useApp();
@@ -30,6 +35,10 @@ function LeadsInner() {
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [confirm, setConfirm] = useState<{ ids: string[]; label: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const sel = useSelection();
+  const { sort, toggle: toggleSort } = useSort<SortKey>({ key: 'created_at', dir: 'desc' });
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -41,16 +50,53 @@ function LeadsInner() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (params.get('discover')) setDiscoverOpen(true); if (params.get('import')) setImportOpen(true); }, [params]);
+  useEffect(() => { sel.clear(); }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = leads.filter((l) => {
-    if (q && !`${l.company_name} ${l.contact_name} ${l.industry} ${l.location}`.toLowerCase().includes(q.toLowerCase())) return false;
-    if (filter === 'A') return l.priority === 'A';
-    if (filter === 'new') return l.stage === 'new';
-    if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
-    if (filter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
-    if (filter === 'import') return l.source === 'import';
-    return true;
-  });
+  const filtered = useMemo(() => {
+    const list = leads.filter((l) => {
+      if (q && !`${l.company_name} ${l.contact_name} ${l.email} ${l.industry} ${l.location}`.toLowerCase().includes(q.toLowerCase())) return false;
+      if (filter === 'A') return l.priority === 'A';
+      if (filter === 'new') return l.stage === 'new';
+      if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
+      if (filter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
+      if (filter === 'import') return l.source === 'import';
+      return true;
+    });
+    return sortBy(list, (l) => {
+      switch (sort.key) {
+        case 'stage': return STAGE_ORDER.indexOf(l.stage);
+        case 'priority': return l.priority;
+        case 'created_at': return l.created_at;
+        default: return l[sort.key];
+      }
+    }, sort.dir);
+  }, [leads, q, filter, sort]);
+
+  const pager = usePager(filtered, 'leads');
+  useEffect(() => { pager.reset(); }, [q, filter, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pageIds = pager.slice.map((l) => l.id);
+  const allIds = filtered.map((l) => l.id);
+
+  async function doDelete() {
+    if (!confirm) return;
+    setBusy(true);
+    const { error } = await supabase.from('leads').delete().in('id', confirm.ids);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(confirm.ids.length === 1 ? 'Lead deleted' : `${confirm.ids.length} leads deleted`);
+    sel.setMany(confirm.ids, false);
+    setConfirm(null);
+    if (active && confirm.ids.includes(active.id)) setActive(null);
+    load(); refreshCounts();
+  }
+
+  async function bulkStage(stage: string) {
+    const ids = [...sel.selected];
+    const { error } = await supabase.from('leads').update({ stage, updated_at: new Date().toISOString() }).in('id', ids);
+    if (error) return toast.error(error.message);
+    toast.success(`${ids.length} leads moved to ${STAGES.find((s) => s.key === stage)?.label || stage}`);
+    sel.clear(); load(); refreshCounts();
+  }
 
   if (!project) return <Thinking label="Loading project…" />;
 
@@ -87,39 +133,75 @@ function LeadsInner() {
               <button onClick={() => setDiscoverOpen(true)} className="btn btn-accent"><Sparkles size={15} /> Find leads with AI</button>
             </div>} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  {['Company', 'Industry', 'Location', 'Fit', 'Opp.', 'Prio', 'Stage', 'Contact'].map((h) => <th key={h} className="th">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((l) => (
-                  <tr key={l.id} onClick={() => setActive(l)} className="cursor-pointer transition hover:bg-surface-2">
-                    <td className="td">
-                      <div className="flex items-center gap-1.5 font-bold text-ink">{l.company_name}
-                        {l.source === 'import' && <span className="rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">Imported</span>}
-                      </div>
-                      {l.website && <div className="text-[11.5px] text-faint">{l.website.replace(/^https?:\/\//, '')}</div>}
-                    </td>
-                    <td className="td text-dim">{l.industry || '—'}</td>
-                    <td className="td text-dim">{l.location || '—'}</td>
-                    <td className="td"><Score value={l.fit_score} /></td>
-                    <td className="td"><Score value={l.opportunity_score} /></td>
-                    <td className="td"><PriorityTag p={l.priority} /></td>
-                    <td className="td"><StageTag stage={l.stage} /></td>
-                    <td className="td">
-                      {l.contact_name ? <div className="font-semibold text-ink">{l.contact_name}</div> : <span className="text-faint">—</span>}
-                      {l.email && <div className="text-[11.5px] text-faint">{l.email}</div>}
-                    </td>
+          <>
+            <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
+              <SelectAll pageIds={pageIds} allIds={allIds} sel={sel} noun="leads" />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[13px]">
+                <thead>
+                  <tr>
+                    <th className="th w-8" />
+                    <SortTh label="Company" k="company_name" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Industry" k="industry" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Location" k="location" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Fit" k="fit_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
+                    <SortTh label="Opp." k="opportunity_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
+                    <SortTh label="Prio" k="priority" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Stage" k="stage" sort={sort} onToggle={toggleSort} />
+                    <th className="th">Contact</th>
+                    <SortTh label="Added" k="created_at" sort={sort} onToggle={toggleSort} defaultDir="desc" />
+                    <th className="th w-10" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pager.slice.map((l) => (
+                    <tr key={l.id} onClick={() => setActive(l)} className={`group cursor-pointer transition hover:bg-surface-2 ${sel.has(l.id) ? 'bg-[var(--accent-soft)]' : ''}`}>
+                      <td className="td !pr-0"><Checkbox checked={sel.has(l.id)} onChange={() => sel.toggle(l.id)} label={`Select ${l.company_name}`} /></td>
+                      <td className="td">
+                        <div className="flex items-center gap-1.5 font-bold text-ink">{l.company_name}
+                          {l.source === 'import' && <span className="rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">Imported</span>}
+                        </div>
+                        {l.website && <div className="text-[11.5px] text-faint">{l.website.replace(/^https?:\/\//, '')}</div>}
+                      </td>
+                      <td className="td text-dim">{l.industry || '—'}</td>
+                      <td className="td text-dim">{l.location || '—'}</td>
+                      <td className="td"><Score value={l.fit_score} /></td>
+                      <td className="td"><Score value={l.opportunity_score} /></td>
+                      <td className="td"><PriorityTag p={l.priority} /></td>
+                      <td className="td"><StageTag stage={l.stage} /></td>
+                      <td className="td">
+                        {l.contact_name ? <div className="font-semibold text-ink">{l.contact_name}</div> : <span className="text-faint">—</span>}
+                        {l.email && <div className="text-[11.5px] text-faint">{l.email}</div>}
+                      </td>
+                      <td className="td whitespace-nowrap text-[12px] text-faint">{new Date(l.created_at).toLocaleDateString()}</td>
+                      <td className="td !pl-0">
+                        <button onClick={(e) => { e.stopPropagation(); setConfirm({ ids: [l.id], label: l.company_name }); }}
+                          className="grid h-8 w-8 place-items-center rounded-lg text-faint opacity-0 transition hover:bg-[var(--red-soft)] hover:text-bad group-hover:opacity-100 focus:opacity-100" aria-label={`Delete ${l.company_name}`}>
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="leads" />
+          </>
         )}
       </Card>
+
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <select className="rounded-lg border border-white/20 bg-transparent px-2 py-1.5 text-[12.5px] font-bold text-bg outline-none [&>option]:text-ink" value="" onChange={(e) => e.target.value && bulkStage(e.target.value)}>
+          <option value="">Move to stage…</option>
+          {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <button onClick={() => setConfirm({ ids: [...sel.selected], label: `${sel.count} leads` })} className="btn btn-sm text-white" style={{ background: 'var(--red)' }}><Trash2 size={14} /> Delete</button>
+      </BulkBar>
+
+      <ConfirmDialog open={!!confirm} busy={busy} onCancel={() => setConfirm(null)} onConfirm={doDelete}
+        title={confirm && confirm.ids.length > 1 ? `Delete ${confirm.ids.length} leads?` : 'Delete this lead?'}
+        body={<>This permanently removes <b className="text-ink">{confirm?.label}</b> together with their outreach history, replies and tasks. This cannot be undone.</>} />
 
       <DiscoverModal open={discoverOpen} onClose={() => setDiscoverOpen(false)} onDone={() => { load(); }} />
       <ManualModal open={manualOpen} onClose={() => setManualOpen(false)} onDone={load} />
