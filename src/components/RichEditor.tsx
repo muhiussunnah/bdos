@@ -120,15 +120,17 @@ export const RichEditor = forwardRef<RichEditorHandle, {
    * rewrite to an inline px font-size that email clients respect.
    */
   const pendingPx = useRef<number | null>(null);
-  const normaliseFonts = useCallback(() => {
-    const el = ed.current; if (!el) return;
+  const normaliseFonts = useCallback((): HTMLSpanElement[] => {
+    const el = ed.current; if (!el) return [];
+    const created: HTMLSpanElement[] = [];
     el.querySelectorAll('font').forEach((f) => {
       const span = document.createElement('span');
       const size = Number(f.getAttribute('size'));
       span.style.fontSize = size === 7 && pendingPx.current ? `${pendingPx.current}px` : (SIZES[size - 1] || 'medium');
       if (f.getAttribute('color')) span.style.color = f.getAttribute('color')!;
-      span.innerHTML = f.innerHTML; f.replaceWith(span);
+      span.innerHTML = f.innerHTML; f.replaceWith(span); created.push(span);
     });
+    return created;
   }, []);
 
   useEffect(() => { normaliseFontsRef.current = normaliseFonts; }, [normaliseFonts]);
@@ -136,8 +138,10 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   /** Font size (px) at the caret / selection anchor. */
   const currentPx = useCallback((): number => {
     const sel = window.getSelection();
-    const live = sel && sel.rangeCount && ed.current?.contains(sel.anchorNode) ? sel.anchorNode : null;
-    const node: Node | null = live || savedRange.current?.startContainer || null;
+    const range = sel && sel.rangeCount && ed.current?.contains(sel.anchorNode) ? sel.getRangeAt(0) : savedRange.current;
+    let node: Node | null = range ? range.startContainer : null;
+    // a range that starts *before* an element (e.g. right after we re-select a resized span) → look inside it
+    if (node && node.nodeType === 1 && node.childNodes.length && range) node = node.childNodes[Math.min(range.startOffset, node.childNodes.length - 1)] || node;
     const el = (node?.nodeType === 3 ? node.parentElement : (node as HTMLElement | null)) || ed.current;
     return el ? Math.round(parseFloat(getComputedStyle(el).fontSize) || 14) : 14;
   }, []);
@@ -152,10 +156,18 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   function applyFontSize(px: number) {
     const size = Math.round(Math.min(96, Math.max(6, px)));
     restoreSelection();
+    const wasRange = !!savedRange.current && !savedRange.current.collapsed;
     pendingPx.current = size;
     document.execCommand('styleWithCSS', false, 'false');
     document.execCommand('fontSize', false, '7');
-    normaliseFonts();
+    const created = normaliseFonts();
+    // keep the text selected so the user can keep styling it (bold, colour, another size…)
+    if (wasRange && created.length) {
+      const r = document.createRange();
+      r.setStartBefore(created[0]); r.setEndAfter(created[created.length - 1]);
+      const s = window.getSelection(); s?.removeAllRanges(); s?.addRange(r);
+      savedRange.current = r.cloneRange();
+    }
     setSizeText(String(size));
     emit(); force((n) => n + 1);
   }
@@ -319,7 +331,6 @@ export const RichEditor = forwardRef<RichEditorHandle, {
         <div ref={ed} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder={placeholder}
           className="rte-body max-w-none px-4 py-3 text-[14px] leading-relaxed text-ink outline-none" style={{ minHeight }}
           onInput={emit} onBlur={emit} onKeyUp={() => { saveSelection(); syncSize(); force((n) => n + 1); }} onMouseUp={() => { saveSelection(); syncSize(); force((n) => n + 1); }}
-          onFocus={syncSize}
           onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} />
       )}
     </div>
