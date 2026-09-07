@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Undo2, Redo2, Heading2, Heading3, Heading4, Pilcrow, Bold, Italic, Underline, Strikethrough,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight, Quote, Code2, Minus, Table2, Link2, Image as ImageIcon,
-  Upload, Code, Eraser, AArrowUp, AArrowDown, Loader2,
+  Upload, Code, Eraser, AArrowUp, AArrowDown, Loader2, TextSelect, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -59,6 +59,7 @@ function sanitize(html: string): string {
 }
 
 const SIZES = ['x-small', 'small', 'medium', 'large', 'x-large', 'xx-large', 'xxx-large'];
+const SIZE_PRESETS = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36, 48];
 
 export const RichEditor = forwardRef<RichEditorHandle, {
   value: string; onChange: (html: string) => void; placeholder?: string; minHeight?: number; className?: string;
@@ -69,6 +70,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const [uploading, setUploading] = useState(false);
   const [, force] = useState(0);
   const savedRange = useRef<Range | null>(null);
+  const [sizeText, setSizeText] = useState('14');
+  const [sizeOpen, setSizeOpen] = useState(false);
+  const sizeEditing = useRef(false);
 
   // keep DOM in sync when the value changes from outside (AI draft, reset)
   useEffect(() => {
@@ -129,19 +133,47 @@ export const RichEditor = forwardRef<RichEditorHandle, {
 
   useEffect(() => { normaliseFontsRef.current = normaliseFonts; }, [normaliseFonts]);
 
-  function fontStep(delta: number) {
-    restoreSelection();
+  /** Font size (px) at the caret / selection anchor. */
+  const currentPx = useCallback((): number => {
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const node = sel.anchorNode;
-    const anchorEl = (node?.nodeType === 3 ? node.parentElement : (node as HTMLElement | null)) || ed.current;
-    const curPx = anchorEl ? parseFloat(getComputedStyle(anchorEl).fontSize) || 14 : 14;
-    const next = Math.round(Math.min(56, Math.max(9, curPx * (delta > 0 ? 1.2 : 1 / 1.2))));
-    pendingPx.current = next;
+    const live = sel && sel.rangeCount && ed.current?.contains(sel.anchorNode) ? sel.anchorNode : null;
+    const node: Node | null = live || savedRange.current?.startContainer || null;
+    const el = (node?.nodeType === 3 ? node.parentElement : (node as HTMLElement | null)) || ed.current;
+    return el ? Math.round(parseFloat(getComputedStyle(el).fontSize) || 14) : 14;
+  }, []);
+
+  // keep the size box in sync with wherever the caret is
+  const syncSize = useCallback(() => {
+    if (sizeEditing.current || !inEditorRef.current?.()) return;
+    setSizeText(String(currentPx()));
+  }, [currentPx]);
+  const inEditorRef = useRef<(() => boolean) | null>(null);
+
+  function applyFontSize(px: number) {
+    const size = Math.round(Math.min(96, Math.max(6, px)));
+    restoreSelection();
+    pendingPx.current = size;
     document.execCommand('styleWithCSS', false, 'false');
     document.execCommand('fontSize', false, '7');
     normaliseFonts();
+    setSizeText(String(size));
     emit(); force((n) => n + 1);
+  }
+
+  function fontStep(delta: number) {
+    restoreSelection();
+    const cur = currentPx();
+    const idx = SIZE_PRESETS.findIndex((s) => s >= cur);
+    let next: number;
+    if (delta > 0) next = idx === -1 ? cur + 4 : SIZE_PRESETS[idx] === cur ? (SIZE_PRESETS[idx + 1] ?? cur + 4) : SIZE_PRESETS[idx];
+    else next = idx <= 0 ? Math.max(6, cur - 2) : SIZE_PRESETS[idx] === cur ? SIZE_PRESETS[idx - 1] : SIZE_PRESETS[idx - 1];
+    applyFontSize(next);
+  }
+
+  function commitSizeText() {
+    sizeEditing.current = false;
+    const n = parseInt(sizeText, 10);
+    if (Number.isFinite(n) && n > 0 && n !== currentPx()) applyFontSize(n); else setSizeText(String(currentPx()));
   }
 
   function link() {
@@ -194,7 +226,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (f && f.type.startsWith('image/')) { e.preventDefault(); ed.current?.focus(); upload(f); }
   }
 
-  const inEditor = () => typeof document !== 'undefined' && !!ed.current && ed.current.contains(document.activeElement);
+  const inEditor = () => typeof document !== 'undefined' && !!ed.current && (ed.current.contains(document.activeElement) || !!savedRange.current);
+  inEditorRef.current = inEditor;
   const active = (cmd: string) => { try { return inEditor() && document.queryCommandState(cmd); } catch { return false; } };
   const block = () => { try { return inEditor() ? String(document.queryCommandValue('formatBlock')).toLowerCase() : ''; } catch { return ''; } };
 
@@ -212,6 +245,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
       <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-surface-2 px-2 py-1.5" onMouseUp={saveSelection} onKeyUp={saveSelection}>
         <Btn title="Undo" onClick={() => exec('undo')}><Undo2 size={15} /></Btn>
         <Btn title="Redo" onClick={() => exec('redo')}><Redo2 size={15} /></Btn>
+        <Btn title="Select all (Ctrl+A)" onClick={() => { ed.current?.focus(); document.execCommand('selectAll'); saveSelection(); force((n) => n + 1); }}><TextSelect size={15} /></Btn>
         <Sep />
         <Btn title="Heading 2" on={block() === 'h2'} onClick={() => exec('formatBlock', 'H2')}><Heading2 size={15} /></Btn>
         <Btn title="Heading 3" on={block() === 'h3'} onClick={() => exec('formatBlock', 'H3')}><Heading3 size={15} /></Btn>
@@ -219,6 +253,33 @@ export const RichEditor = forwardRef<RichEditorHandle, {
         <Btn title="Paragraph" on={block() === 'p'} onClick={() => exec('formatBlock', 'P')}><Pilcrow size={15} /></Btn>
         <Sep />
         <Btn title="Smaller text" onClick={() => fontStep(-1)}><AArrowDown size={15} /></Btn>
+        <div className="relative flex items-center">
+          <input value={sizeText} title="Font size (px) — type a number or pick one" aria-label="Font size in pixels" inputMode="numeric"
+            onMouseDown={() => saveSelection()} onFocus={() => { sizeEditing.current = true; }}
+            onChange={(e) => setSizeText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitSizeText(); } if (e.key === 'Escape') { sizeEditing.current = false; setSizeText(String(currentPx())); ed.current?.focus(); } }}
+            onBlur={() => { if (!sizeOpen) commitSizeText(); }}
+            className="h-8 w-11 rounded-l-lg border border-line bg-surface px-1.5 text-center text-[12.5px] font-bold text-ink outline-none focus:border-accent" />
+          <button type="button" title="Pick a font size" aria-label="Pick a font size" aria-expanded={sizeOpen}
+            onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => setSizeOpen((v) => !v)}
+            className="grid h-8 w-5 place-items-center rounded-r-lg border border-l-0 border-line bg-surface text-dim hover:text-ink">
+            <ChevronDown size={12} />
+          </button>
+          {sizeOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onMouseDown={(e) => { e.preventDefault(); setSizeOpen(false); }} />
+              <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-20 overflow-y-auto rounded-xl border border-line bg-surface py-1 shadow-pop">
+                {SIZE_PRESETS.map((s) => (
+                  <button key={s} type="button" onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setSizeOpen(false); applyFontSize(s); }}
+                    className={cn('block w-full px-3 py-1 text-left text-[12.5px] font-semibold text-ink hover:bg-surface-2', String(s) === sizeText && 'bg-[var(--accent-soft)] text-accent')}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <Btn title="Larger text" onClick={() => fontStep(1)}><AArrowUp size={15} /></Btn>
         <Sep />
         <Btn title="Bold (Ctrl+B)" on={active('bold')} onClick={() => exec('bold')}><Bold size={15} /></Btn>
@@ -257,7 +318,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
       ) : (
         <div ref={ed} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder={placeholder}
           className="rte-body max-w-none px-4 py-3 text-[14px] leading-relaxed text-ink outline-none" style={{ minHeight }}
-          onInput={emit} onBlur={emit} onKeyUp={() => { saveSelection(); force((n) => n + 1); }} onMouseUp={() => { saveSelection(); force((n) => n + 1); }}
+          onInput={emit} onBlur={emit} onKeyUp={() => { saveSelection(); syncSize(); force((n) => n + 1); }} onMouseUp={() => { saveSelection(); syncSize(); force((n) => n + 1); }}
+          onFocus={syncSize}
           onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} />
       )}
     </div>
