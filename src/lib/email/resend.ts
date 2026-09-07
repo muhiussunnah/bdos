@@ -139,3 +139,19 @@ export function htmlToText(html: string): string {
     .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * Wrap rich-text editor HTML for email clients: base typography plus inline
+ * styles on the elements Gmail/Outlook ignore stylesheets for.
+ */
+export function wrapEmailHtml(inner: string): string {
+  const styled = inner
+    .replace(/<table(?![^>]*style=)/gi, '<table style="border-collapse:collapse;width:100%"')
+    .replace(/<(td|th)(?![^>]*style=)/gi, '<$1 style="border:1px solid #d9d6e0;padding:6px 10px"')
+    .replace(/<blockquote(?![^>]*style=)/gi, '<blockquote style="margin:8px 0;padding:6px 14px;border-left:3px solid #c9c4d6;color:#4b4658"')
+    .replace(/<pre(?![^>]*style=)/gi, '<pre style="background:#f3f1f7;padding:12px 14px;border-radius:8px;font-family:Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap"')
+    .replace(/<img(?![^>]*style=)/gi, '<img style="max-width:100%;height:auto"')
+    .replace(/<hr(?![^>]*style=)/gi, '<hr style="border:none;border-top:1px solid #d9d6e0;margin:16px 0"')
+    .replace(/<a\s/gi, '<a style="color:#7c3aed" ');
+  return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#16121F">${styled}</div>`;
+}

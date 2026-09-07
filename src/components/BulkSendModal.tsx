@@ -7,6 +7,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Modal, StageTag } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
+import { RichEditor, isHtmlEmpty, type RichEditorHandle } from '@/components/RichEditor';
 import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import type { Lead } from '@/lib/types';
 
@@ -51,7 +52,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [startFollowups, setStartFollowups] = useState(true);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<RichEditorHandle>(null);
 
   // sending
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -116,12 +117,8 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   }
 
   function insertPlaceholder(p: string) {
-    const el = bodyRef.current;
-    if (!el) return setBody((b) => b + p);
-    const start = el.selectionStart ?? body.length, end = el.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + p + body.slice(end);
-    setBody(next);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + p.length, start + p.length); });
+    if (bodyRef.current) bodyRef.current.insertText(p);
+    else setBody((b) => b + p);
   }
 
   const previewVars = recipients[0] ? recipientVars(recipients[0]) : { first_name: 'Anna', name: 'Anna Svensson', company: 'Acme AB', email: 'anna@acme.se', role: '', website: '', domain: 'acme.se' };
@@ -131,7 +128,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     if (!project) return;
     if (!recipients.length) return toast.error('No recipients');
     if (!subject.trim()) return toast.error('Add a subject');
-    if (!body.trim()) return toast.error('Write a message');
+    if (isHtmlEmpty(body)) return toast.error('Write a message');
     setBusy(true); setStep('sending');
     let list = recipients;
     try {
@@ -158,7 +155,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
       for (let i = 0; i < list.length; i += CHUNK) {
         const chunk = list.slice(i, i + CHUNK);
         const fd = new FormData();
-        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), body, recipients: chunk, startFollowups, batchId }));
+        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId }));
         files.forEach((f) => fd.append('files', f));
         const res = await fetch('/api/outreach/bulk', { method: 'POST', body: fd });
         const data = await res.json().catch(() => ({}));
@@ -276,8 +273,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
                 {PLACEHOLDERS.map((p) => <button key={p} type="button" onClick={() => insertPlaceholder(p)} className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-dim hover:border-accent hover:text-accent">{p}</button>)}
               </div>
             </div>
-            <textarea ref={bodyRef} className="input min-h-[220px]" value={body} onChange={(e) => setBody(e.target.value)}
-              placeholder={'Hi {{first_name|there}},\n\nI noticed {{company}} …'} />
+            <RichEditor ref={bodyRef} value={body} onChange={setBody} minHeight={220} placeholder="Hi {{first_name|there}}, I noticed {{company}} …" />
             <p className="hint">Placeholders are filled per recipient. Use {'{{first_name|there}}'} to set a fallback when a value is missing.</p>
           </div>
 
@@ -287,7 +283,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
             <div className="rounded-xl border border-line bg-surface-2 p-3.5">
               <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-faint">Preview · {recipients[0]?.email || 'example'}</div>
               <div className="text-[13px] font-bold text-ink">{renderTemplate(subject, previewVars) || '(no subject)'}</div>
-              <div className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-dim">{renderTemplate(body, previewVars)}</div>
+              <div className="rte-preview mt-1 text-dim" dangerouslySetInnerHTML={{ __html: renderTemplate(body, previewVars) }} />
             </div>
           )}
 

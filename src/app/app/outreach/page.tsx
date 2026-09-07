@@ -11,7 +11,7 @@ import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, Confi
 import { relTime } from '@/lib/utils';
 import type { Message, Lead } from '@/lib/types';
 
-type Meta = { manual?: boolean; mode?: 'compose' | 'bulk'; attachments?: string[]; cc?: string[]; bcc?: string[] };
+type Meta = { manual?: boolean; mode?: 'compose' | 'bulk'; attachments?: string[]; cc?: string[]; bcc?: string[]; html?: string };
 
 const VIEWS = [
   { key: 'all', label: 'All' },
@@ -191,7 +191,7 @@ export default function OutreachPage() {
                         {meta.bcc?.length ? <div>Bcc: {meta.bcc.join(', ')}</div> : null}
                       </div>
                     ) : null}
-                    <div className="whitespace-pre-wrap">{m.body}</div>
+                    {meta.html ? <div className="rte-preview text-ink" dangerouslySetInnerHTML={{ __html: meta.html }} /> : <div className="whitespace-pre-wrap">{m.body}</div>}
                     {meta.attachments && meta.attachments.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {meta.attachments.map((a) => <span key={a} className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11.5px] font-semibold text-dim"><Paperclip size={11} /> {a}</span>)}

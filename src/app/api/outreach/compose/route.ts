@@ -1,5 +1,5 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
-import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, parseAddressList } from '@/lib/email/resend';
+import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, parseAddressList, wrapEmailHtml, htmlToText } from '@/lib/email/resend';
 import { isEmail } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
 
@@ -25,7 +25,10 @@ export async function POST(req: Request) {
   const cc = parseAddressList(s('cc'));
   const bcc = parseAddressList(s('bcc'));
   const subject = s('subject');
-  const body = s('body');
+  // rich editor sends `html`; plain callers send `body`. Text part is always derived.
+  const richHtml = s('html');
+  const body = richHtml ? htmlToText(richHtml) : s('body');
+  const html = richHtml ? wrapEmailHtml(richHtml) : textToHtml(body);
   let leadId = s('leadId') || null;
   const saveLead = s('saveLead') === '1';
   const startFollowups = s('startFollowups') === '1';
@@ -35,7 +38,7 @@ export async function POST(req: Request) {
   const badAddr = [...to, ...cc, ...bcc].find((a) => !isEmail(a));
   if (badAddr) return bad(`"${badAddr}" is not a valid email address`);
   if (!subject) return bad('Subject is required');
-  if (!body) return bad('Message body is empty');
+  if (!body && !/<img/i.test(richHtml)) return bad('Message body is empty');
 
   const { data: project } = await supabase.from('projects').select('*').eq('id', projectId).single();
   if (!project) return bad('Project not found', 404);
@@ -70,7 +73,7 @@ export async function POST(req: Request) {
     if (lead && lead.project_id !== projectId) return bad('Lead belongs to another project');
   }
 
-  const meta = { manual: true, mode: 'compose', cc, bcc, attachments: (attachments || []).map((a) => a.filename) };
+  const meta = { manual: true, mode: 'compose', cc, bcc, attachments: (attachments || []).map((a) => a.filename), ...(richHtml ? { html: richHtml } : {}) };
   const base = {
     lead_id: lead?.id || null, project_id: projectId, owner_id: userId, direction: 'outbound' as const,
     subject, body, to_email: to.join(', '), from_email: from, ai_meta: meta,
@@ -78,7 +81,7 @@ export async function POST(req: Request) {
 
   let providerId: string | null = null;
   try {
-    const sent = await sendEmail({ to, cc, bcc, subject, html: textToHtml(body), text: body, from, apiKey, attachments });
+    const sent = await sendEmail({ to, cc, bcc, subject, html, text: body || subject, from, apiKey, attachments });
     providerId = sent.id;
   } catch (e) {
     await supabase.from('messages').insert({ ...base, status: 'failed' });

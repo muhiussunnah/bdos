@@ -5,9 +5,10 @@ import { toast } from 'sonner';
 import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Thinking } from '@/components/ui';
+import { SecretInput } from '@/components/SecretInput';
 import { PROVIDERS, LANGS, type ProviderKey } from '@/lib/constants';
 
-type Secrets = Record<string, { has: boolean; hint: string; meta: Record<string, unknown> }>;
+type Secrets = Record<string, { has: boolean; hint: string; key: string; meta: Record<string, unknown> }>;
 
 export default function SettingsPage() {
   const { user, supabase, settings, refreshSettings } = useApp();
@@ -19,7 +20,7 @@ export default function SettingsPage() {
     const { data } = await supabase.from('user_secrets').select('provider, api_key, meta').eq('owner_id', user.id);
     const map: Secrets = {};
     (data || []).forEach((r: { provider: string; api_key: string | null; meta: Record<string, unknown> }) => {
-      map[r.provider] = { has: !!r.api_key, hint: r.api_key ? `••••${r.api_key.slice(-4)}` : '', meta: r.meta || {} };
+      map[r.provider] = { has: !!r.api_key, hint: r.api_key ? `••••${r.api_key.slice(-4)}` : '', key: r.api_key || '', meta: r.meta || {} };
     });
     setSecrets(map);
     setLoading(false);
@@ -89,30 +90,36 @@ function AITab({ secrets, reload }: { secrets: Secrets; reload: () => void }) {
 
 function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS)[number]; state?: Secrets[string]; reload: () => void }) {
   const { user, supabase } = useApp();
-  const [key, setKey] = useState('');
+  const saved = state?.key || '';
+  const [key, setKey] = useState(saved);
   const [model, setModel] = useState(provider.models[0]);
-  const [busy, setBusy] = useState<'save' | 'test' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'test' | 'remove' | null>(null);
+  useEffect(() => { setKey(saved); }, [saved]);
+  const dirty = key.trim() !== saved;
 
   async function save() {
-    if (!key) return toast.error('Paste a key first');
+    if (!key.trim()) return toast.error('Paste a key first');
     setBusy('save');
-    const { error } = await supabase.from('user_secrets').upsert({ owner_id: user.id, provider: provider.key, api_key: key, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('user_secrets').upsert({ owner_id: user.id, provider: provider.key, api_key: key.trim(), updated_at: new Date().toISOString() });
     setBusy(null);
     if (error) return toast.error(error.message);
-    toast.success(`${provider.label} key saved`); setKey(''); reload();
+    toast.success(`${provider.label} key saved`); reload();
+  }
+
+  async function remove() {
+    if (!window.confirm(`Remove the saved ${provider.label} key?`)) return;
+    setBusy('remove');
+    const { error } = await supabase.from('user_secrets').delete().eq('owner_id', user.id).eq('provider', provider.key);
+    setBusy(null);
+    if (error) return toast.error(error.message);
+    toast.success(`${provider.label} key removed`); setKey(''); reload();
   }
 
   async function test() {
-    const testKey = key || undefined;
-    if (!testKey && !state?.has) return toast.error('Save or paste a key first');
+    const useKey = key.trim();
+    if (!useKey) return toast.error('Save or paste a key first');
     setBusy('test');
     try {
-      // if no fresh key typed, pull the stored one to test
-      let useKey = testKey;
-      if (!useKey) {
-        const { data } = await supabase.from('user_secrets').select('api_key').eq('owner_id', user.id).eq('provider', provider.key).single();
-        useKey = data?.api_key;
-      }
       const res = await fetch('/api/ai/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: provider.key, model, apiKey: useKey }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -129,12 +136,12 @@ function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS
         <a href={provider.keyUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline">Get key <ExternalLink size={12} /></a>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="field !mb-0 flex-1 min-w-[200px]"><label>API key {state?.has && <span className="text-faint">· {state.hint}</span>}</label>
-          <input className="input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={state?.has ? 'Replace key…' : provider.placeholder} /></div>
+        <div className="field !mb-0 flex-1 min-w-[240px]"><label>API key {state?.has && <span className="text-faint">· saved {state.hint}</span>}{dirty && <span className="text-accent"> · unsaved change</span>}</label>
+          <SecretInput value={key} onChange={setKey} placeholder={provider.placeholder} saved={state?.has} onRemove={remove} /></div>
         <div className="field !mb-0 w-40"><label>Test model</label>
           <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>{provider.models.map((m) => <option key={m}>{m}</option>)}</select></div>
-        <button onClick={test} disabled={!!busy} className="btn btn-ghost">{busy === 'test' ? <Loader2 size={14} className="animate-spin" /> : 'Test'}</button>
-        <button onClick={save} disabled={!!busy} className="btn btn-accent">{busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button>
+        <button onClick={test} disabled={!!busy || !key.trim()} className="btn btn-ghost">{busy === 'test' ? <Loader2 size={14} className="animate-spin" /> : 'Test'}</button>
+        <button onClick={save} disabled={!!busy || !dirty || !key.trim()} className="btn btn-accent">{busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button>
       </div>
     </Card>
   );
@@ -142,17 +149,29 @@ function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS
 
 function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Secrets; reload: () => void; settings: ReturnType<typeof useApp>['settings']; refreshSettings: () => void }) {
   const { user, supabase } = useApp();
-  const [key, setKey] = useState('');
+  const saved = secrets.resend?.key || '';
+  const [key, setKey] = useState(saved);
   const [fromName, setFromName] = useState(settings?.from_name || '');
   const [fromEmail, setFromEmail] = useState(settings?.from_email || '');
   const [busy, setBusy] = useState(false);
+  useEffect(() => { setKey(saved); }, [saved]);
 
   async function save() {
     setBusy(true);
-    if (key) await supabase.from('user_secrets').upsert({ owner_id: user.id, provider: 'resend', api_key: key, updated_at: new Date().toISOString() });
+    if (key.trim() && key.trim() !== saved) {
+      const { error } = await supabase.from('user_secrets').upsert({ owner_id: user.id, provider: 'resend', api_key: key.trim(), updated_at: new Date().toISOString() });
+      if (error) { setBusy(false); return toast.error(error.message); }
+    }
     await supabase.from('user_settings').update({ from_name: fromName || null, from_email: fromEmail || null }).eq('owner_id', user.id);
-    setBusy(false); setKey(''); reload(); refreshSettings();
+    setBusy(false); reload(); refreshSettings();
     toast.success('Email settings saved');
+  }
+
+  async function removeKey() {
+    if (!window.confirm('Remove the saved Resend key? Sending will stop until you add one.')) return;
+    const { error } = await supabase.from('user_secrets').delete().eq('owner_id', user.id).eq('provider', 'resend');
+    if (error) return toast.error(error.message);
+    toast.success('Resend key removed'); setKey(''); reload();
   }
 
   return (
@@ -161,8 +180,8 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
         {secrets.resend?.has && <span className="tag" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}><CircleCheck size={12} /> connected</span>}</h3>
         <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline">Get key <ExternalLink size={12} /></a>
       </div>
-      <div className="field"><label>Resend API key {secrets.resend?.has && <span className="text-faint">· {secrets.resend.hint}</span>}</label>
-        <input className="input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={secrets.resend?.has ? 'Replace key…' : 're_...'} /></div>
+      <div className="field"><label>Resend API key {secrets.resend?.has && <span className="text-faint">· saved {secrets.resend.hint}</span>}{key.trim() !== saved && <span className="text-accent"> · unsaved change</span>}</label>
+        <SecretInput value={key} onChange={setKey} placeholder="re_..." saved={secrets.resend?.has} onRemove={removeKey} /></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field"><label>From name</label><input className="input" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Albin from Famies" /></div>
         <div className="field"><label>From email (verified domain)</label><input className="input" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="albin@famies.se" /></div>

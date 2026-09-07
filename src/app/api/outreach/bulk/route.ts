@@ -1,12 +1,12 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
-import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm } from '@/lib/email/resend';
+import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText } from '@/lib/email/resend';
 import { isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
 
 export const runtime = 'edge';
 
 interface Recipient { email: string; name?: string | null; company?: string | null; role?: string | null; website?: string | null; leadId?: string | null }
-interface Payload { projectId: string; subject: string; body: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string }
+interface Payload { projectId: string; subject: string; body: string; html?: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string }
 
 const MAX_PER_REQUEST = 25;
 
@@ -28,10 +28,12 @@ export async function POST(req: Request) {
   try { payload = JSON.parse(String(form.get('payload') || '{}')); }
   catch { return bad('Invalid payload'); }
 
-  const { projectId, subject, body, startFollowups = true, batchId } = payload;
+  const { projectId, subject, startFollowups = true, batchId } = payload;
+  const richHtml = (payload.html || '').trim();
+  const body = richHtml ? htmlToText(richHtml) : (payload.body || '');
   const recipients = Array.isArray(payload.recipients) ? payload.recipients : [];
   if (!projectId) return bad('projectId is required');
-  if (!subject?.trim() || !body?.trim()) return bad('Subject and body are required');
+  if (!subject?.trim() || (!body.trim() && !/<img/i.test(richHtml))) return bad('Subject and body are required');
   if (!recipients.length) return bad('No recipients');
   if (recipients.length > MAX_PER_REQUEST) return bad(`Send at most ${MAX_PER_REQUEST} recipients per request`);
 
@@ -68,13 +70,14 @@ export async function POST(req: Request) {
     });
     const subj = renderTemplate(subject, vars);
     const text = renderTemplate(body, vars);
+    const htmlOut = richHtml ? wrapEmailHtml(renderTemplate(richHtml, vars)) : textToHtml(text);
     const base = {
       lead_id: lead?.id || null, project_id: projectId, owner_id: userId, direction: 'outbound' as const,
       subject: subj, body: text, to_email: email, from_email: from,
-      ai_meta: { manual: true, mode: 'bulk', batchId: batchId || null, attachments: attachmentNames },
+      ai_meta: { manual: true, mode: 'bulk', batchId: batchId || null, attachments: attachmentNames, ...(richHtml ? { html: renderTemplate(richHtml, vars) } : {}) },
     };
     try {
-      const sent = await sendEmail({ to: email, subject: subj, html: textToHtml(text), text, from, apiKey, attachments });
+      const sent = await sendEmail({ to: email, subject: subj, html: htmlOut, text: text || subj, from, apiKey, attachments });
       await supabase.from('messages').insert({ ...base, status: 'sent', provider_message_id: sent.id, sent_at: new Date().toISOString() });
       if (lead) {
         const now = new Date().toISOString();

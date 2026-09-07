@@ -6,6 +6,7 @@ import { Send, Loader2, Sparkles, X, Users } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
+import { RichEditor, plainToHtml, isHtmlEmpty } from '@/components/RichEditor';
 import { isEmail } from '@/lib/csv';
 import type { Lead } from '@/lib/types';
 
@@ -81,7 +82,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSubject(data.subject); setBody(data.body);
+      setSubject(data.subject); setBody(plainToHtml(data.body));
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not draft'); }
     finally { setBusy(null); }
   }
@@ -91,13 +92,13 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
     const primary = to.split(/[,;]/)[0]?.trim();
     if (!primary || !isEmail(primary)) return toast.error('Enter a valid recipient email');
     if (!subject.trim()) return toast.error('Add a subject');
-    if (!body.trim()) return toast.error('Write a message');
+    if (isHtmlEmpty(body)) return toast.error('Write a message');
     setBusy('send');
     try {
       const fd = new FormData();
       fd.set('projectId', project.id);
       fd.set('to', to); fd.set('cc', cc); fd.set('bcc', bcc);
-      fd.set('subject', subject.trim()); fd.set('body', body);
+      fd.set('subject', subject.trim()); fd.set('html', body);
       if (picked) fd.set('leadId', picked.id);
       else if (saveLead) { fd.set('saveLead', '1'); fd.set('company', company.trim()); fd.set('contactName', contactName.trim()); }
       if (startFollowups && (picked || saveLead)) fd.set('startFollowups', '1');
@@ -187,7 +188,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
               {busy === 'ai' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Draft with AI
             </button>
           </div>
-          <textarea className="input min-h-[240px]" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message…" />
+          <RichEditor value={body} onChange={setBody} minHeight={260} placeholder="Write your message…" />
         </div>
 
         <AttachmentPicker files={files} onChange={setFiles} compact />
