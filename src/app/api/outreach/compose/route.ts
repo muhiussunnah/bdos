@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   if (!project) return bad('Project not found', 404);
   const P = project as Project;
 
-  const { apiKey, from } = await resolveEmail(supabase, userId);
+  const { apiKey, from } = await resolveEmail(supabase, userId, s('fromId') || null);
   if (!apiKey) return bad('No Resend key. Add it in Settings → Email.', 428);
 
   let attachments;

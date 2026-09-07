@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { getReceivedEmail, htmlToText } from '@/lib/email/resend';
+import { getReceivedEmail, htmlToText, sendersFrom } from '@/lib/email/resend';
 import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { classifyPrompt } from '@/lib/ai/prompts';
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
   const recipients = [...(event.data.to || []), ...(event.data.received_for || [])].map((a) => extractAddress(a));
 
   // 1. which user owns the recipient address?
-  const { data: settingsRows } = await admin.from('user_settings').select('owner_id, from_email').not('from_email', 'is', null);
-  const owner = pickOwner((settingsRows || []) as { owner_id: string; from_email: string }[], recipients);
+  const { data: settingsRows } = await admin.from('user_settings').select('owner_id, from_name, from_email, data');
+  const owner = pickOwner((settingsRows || []) as { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients);
   if (!owner) return ignore('no user with this sending address');
 
   // 2. fetch the full email with the owner's key (also proves the event is genuine)
@@ -154,12 +154,14 @@ function isAutomatedSender(sender: string, subject: string): boolean {
   return false;
 }
 
-function pickOwner(rows: { owner_id: string; from_email: string }[], recipients: string[]): string | null {
-  const exact = rows.find((r) => recipients.includes(r.from_email.trim().toLowerCase()));
-  if (exact) return exact.owner_id;
+function pickOwner(rows: { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients: string[]): string | null {
+  // every sending identity a user has (multiple senders live in data.senders)
+  const owned = rows.flatMap((r) => sendersFrom(r).map((s) => ({ owner: r.owner_id, email: s.email.trim().toLowerCase() })));
+  const exact = owned.find((o) => recipients.includes(o.email));
+  if (exact) return exact.owner;
   const domains = new Set(recipients.map((a) => a.split('@')[1]).filter(Boolean));
-  const byDomain = rows.find((r) => domains.has(r.from_email.split('@')[1]?.toLowerCase()));
-  return byDomain?.owner_id || null;
+  const byDomain = owned.find((o) => domains.has(o.email.split('@')[1]));
+  return byDomain?.owner || null;
 }
 
 /** Standard Svix signature check: HMAC-SHA256(`${id}.${ts}.${body}`) with the base64 secret after "whsec_". */

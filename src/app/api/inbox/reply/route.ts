@@ -22,7 +22,12 @@ export async function POST(req: Request) {
   const to = (lead as Lead)?.email || inbound.from_email;
   if (!to) return bad('No recipient address for this reply.', 422);
 
-  const { apiKey, from } = await resolveEmail(supabase, userId);
+  // reply from whichever of the user's identities received the message (falls back to the default)
+  const resolved = await resolveEmail(supabase, userId);
+  const apiKey = resolved.apiKey;
+  const receivedBy = String(inbound.to_email || '').trim().toLowerCase();
+  const match = receivedBy ? resolved.senders.find((s) => s.email.trim().toLowerCase() === receivedBy) : null;
+  const from = match ? `${match.name} <${match.email}>` : resolved.from;
   if (!apiKey) return bad('No Resend key. Add it in Settings → Email.', 428);
 
   try {

@@ -6,7 +6,7 @@ import type { Project, Lead } from '@/lib/types';
 export const runtime = 'edge';
 
 interface Recipient { email: string; name?: string | null; company?: string | null; role?: string | null; website?: string | null; leadId?: string | null }
-interface Payload { projectId: string; subject: string; body: string; html?: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string }
+interface Payload { projectId: string; subject: string; body: string; html?: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string; fromId?: string | null }
 
 const MAX_PER_REQUEST = 25;
 
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   if (!project) return bad('Project not found', 404);
   const P = project as Project;
 
-  const { apiKey, from } = await resolveEmail(supabase, userId);
+  const { apiKey, from } = await resolveEmail(supabase, userId, payload.fromId || null);
   if (!apiKey) return bad('No Resend key. Add it in Settings → Email.', 428);
 
   let attachments;

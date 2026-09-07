@@ -9,6 +9,7 @@ import { CsvPicker } from '@/components/CsvPicker';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, isHtmlEmpty, type RichEditorHandle } from '@/components/RichEditor';
 import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/lib/csv';
+import { sendersFrom } from '@/lib/email/resend';
 import type { Lead } from '@/lib/types';
 
 type Recipient = { email: string; name?: string | null; company?: string | null; role?: string | null; website?: string | null; leadId?: string | null };
@@ -32,7 +33,9 @@ const LEAD_FILTERS = [
  * write one message with {{placeholders}}, attach files, send in chunks.
  */
 export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone?: () => void }) {
-  const { project, supabase } = useApp();
+  const { project, supabase, settings } = useApp();
+  const senders = sendersFrom(settings);
+  const [fromId, setFromId] = useState('');
   const [step, setStep] = useState<Step>('recipients');
   const [source, setSource] = useState<Source>('csv');
 
@@ -64,11 +67,12 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     setStep('recipients'); setSource('csv'); setRows(null); setCsvName(null); setAlsoImport(true);
     setSelected(new Set()); setQ(''); setLeadFilter('all'); setSubject(''); setBody(''); setFiles([]);
     setStartFollowups(true); setProgress({ done: 0, total: 0 }); setResults([]); setBusy(false);
+    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || '');
     if (project) {
       supabase.from('leads').select('*').eq('project_id', project.id).not('email', 'is', null).order('created_at', { ascending: false })
         .then(({ data }) => setLeads((data as Lead[]) || []));
     }
-  }, [open, project, supabase]);
+  }, [open, project, supabase, settings]);
 
   // ---- recipients from CSV
   const csvRecipients = useMemo<Recipient[]>(() => {
@@ -155,7 +159,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
       for (let i = 0; i < list.length; i += CHUNK) {
         const chunk = list.slice(i, i + CHUNK);
         const fd = new FormData();
-        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId }));
+        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId, fromId: fromId || null }));
         files.forEach((f) => fd.append('files', f));
         const res = await fetch('/api/outreach/bulk', { method: 'POST', body: fd });
         const data = await res.json().catch(() => ({}));
@@ -265,6 +269,12 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
 
       {step === 'message' && (
         <div className="space-y-3">
+          {senders.length > 1 && (
+            <div className="field !mb-0"><label>Send from</label>
+              <select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}>
+                {senders.map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;{s.isDefault ? ' · default' : ''}</option>)}
+              </select></div>
+          )}
           <div className="field !mb-0"><label>Subject</label>
             <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Quick question for {{company}}" /></div>
           <div className="field !mb-0">

@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck } from 'lucide-react';
+import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck, Star, Trash2, Plus } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Thinking } from '@/components/ui';
 import { SecretInput } from '@/components/SecretInput';
 import { PROVIDERS, LANGS, type ProviderKey } from '@/lib/constants';
+import { sendersFrom } from '@/lib/email/resend';
+import type { Sender } from '@/lib/types';
 
 type Secrets = Record<string, { has: boolean; hint: string; key: string; meta: Record<string, unknown> }>;
 
@@ -151,19 +153,44 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
   const { user, supabase } = useApp();
   const saved = secrets.resend?.key || '';
   const [key, setKey] = useState(saved);
-  const [fromName, setFromName] = useState(settings?.from_name || '');
-  const [fromEmail, setFromEmail] = useState(settings?.from_email || '');
+  const [senders, setSenders] = useState<Sender[]>(() => sendersFrom(settings));
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { setKey(saved); }, [saved]);
+  useEffect(() => { setSenders(sendersFrom(settings)); }, [settings]);
+
+  const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+
+  function addSender() {
+    const email = newEmail.trim().toLowerCase(), name = newName.trim();
+    if (!emailOk(email)) return toast.error('Enter a valid email address');
+    if (!name) return toast.error('Enter the name recipients should see');
+    if (senders.some((s) => s.email.toLowerCase() === email)) return toast.error('That address is already in the list');
+    setSenders((list) => [...list, { id: `s_${Date.now().toString(36)}`, name, email, isDefault: list.length === 0 }]);
+    setNewName(''); setNewEmail('');
+  }
+  function setDefault(id: string) { setSenders((list) => list.map((s) => ({ ...s, isDefault: s.id === id }))); }
+  function removeSender(id: string) {
+    setSenders((list) => { const next = list.filter((s) => s.id !== id); if (next.length && !next.some((s) => s.isDefault)) next[0].isDefault = true; return next; });
+  }
+  function editSender(id: string, patch: Partial<Sender>) { setSenders((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s))); }
 
   async function save() {
+    if (senders.some((s) => !emailOk(s.email) || !s.name.trim())) return toast.error('Every sender needs a name and a valid email');
     setBusy(true);
     if (key.trim() && key.trim() !== saved) {
       const { error } = await supabase.from('user_secrets').upsert({ owner_id: user.id, provider: 'resend', api_key: key.trim(), updated_at: new Date().toISOString() });
       if (error) { setBusy(false); return toast.error(error.message); }
     }
-    await supabase.from('user_settings').update({ from_name: fromName || null, from_email: fromEmail || null }).eq('owner_id', user.id);
-    setBusy(false); reload(); refreshSettings();
+    const def = senders.find((s) => s.isDefault) || senders[0] || null;
+    const { error } = await supabase.from('user_settings').update({
+      from_name: def?.name || null, from_email: def?.email || null,
+      data: { ...(settings?.data || {}), senders: senders.map((s) => ({ ...s, name: s.name.trim(), email: s.email.trim().toLowerCase() })) },
+    }).eq('owner_id', user.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    reload(); refreshSettings();
     toast.success('Email settings saved');
   }
 
@@ -182,11 +209,34 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
       </div>
       <div className="field"><label>Resend API key {secrets.resend?.has && <span className="text-faint">· saved {secrets.resend.hint}</span>}{key.trim() !== saved && <span className="text-accent"> · unsaved change</span>}</label>
         <SecretInput value={key} onChange={setKey} placeholder="re_..." saved={secrets.resend?.has} onRemove={removeKey} /></div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="field"><label>From name</label><input className="input" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Albin from Famies" /></div>
-        <div className="field"><label>From email (verified domain)</label><input className="input" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="albin@famies.se" /></div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <label className="text-[12px] font-bold text-ink">Sender addresses</label>
+        <span className="text-[11.5px] text-faint">{senders.length ? `${senders.length} sender${senders.length > 1 ? 's' : ''} · default is used by the agent` : 'Add at least one'}</span>
       </div>
-      <p className="hint mb-3">Verify your sending domain in Resend so replies land correctly. Until then, outreach uses the Resend sandbox sender.</p>
+      <div className="mb-3 overflow-hidden rounded-xl border border-line">
+        {senders.length === 0 && <div className="px-3.5 py-4 text-center text-[12.5px] text-faint">No sender yet. Add the name and address your emails should come from.</div>}
+        {senders.map((s) => (
+          <div key={s.id} className={`flex flex-wrap items-center gap-2 border-t border-line px-3 py-2 first:border-t-0 ${s.isDefault ? 'bg-[var(--accent-soft)]' : ''}`}>
+            <button type="button" onClick={() => setDefault(s.id)} title={s.isDefault ? 'Default sender' : 'Make default'} aria-label={s.isDefault ? 'Default sender' : 'Make default'}
+              className={`grid h-8 w-8 flex-none place-items-center rounded-lg ${s.isDefault ? 'text-accent' : 'text-faint hover:text-ink'}`}>
+              {s.isDefault ? <Star size={16} fill="currentColor" /> : <Star size={16} />}
+            </button>
+            <input className="input !w-40 !py-1.5 !text-[12.5px]" value={s.name} onChange={(e) => editSender(s.id, { name: e.target.value })} placeholder="Name" />
+            <input className="input min-w-[200px] flex-1 !py-1.5 !text-[12.5px]" value={s.email} onChange={(e) => editSender(s.id, { email: e.target.value })} placeholder="name@yourdomain.com" />
+            {s.isDefault ? <span className="tag" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>default</span>
+              : <button type="button" onClick={() => setDefault(s.id)} className="btn btn-ghost btn-sm">Set default</button>}
+            <button type="button" onClick={() => removeSender(s.id)} aria-label="Remove sender" className="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-[var(--red-soft)] hover:text-bad"><Trash2 size={14} /></button>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-2 px-3 py-2">
+          <Plus size={15} className="ml-2 text-faint" />
+          <input className="input !w-40 !py-1.5 !text-[12.5px]" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name, e.g. Albin" />
+          <input className="input min-w-[200px] flex-1 !py-1.5 !text-[12.5px]" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="albin@yourdomain.com"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSender(); } }} />
+          <button type="button" onClick={addSender} className="btn btn-primary btn-sm">Add sender</button>
+        </div>
+      </div>
+      <p className="hint mb-3">Every address must be on a domain verified in Resend. The <b>default</b> sender is used by automated outreach and follow-ups; when you compose or send to a list you can pick any sender. Replies are answered from the address that received them.</p>
       <div className="flex justify-end"><button onClick={save} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button></div>
     </Card>
   );

@@ -51,17 +51,36 @@ export async function sendEmail(args: SendArgs): Promise<{ id: string }> {
   return { id: data.id };
 }
 
-/** Resolve the user's Resend key + from-address (their key first, env fallback). */
-export async function resolveEmail(supabase: SupabaseClient, ownerId: string) {
+export interface SenderIdentity { id: string; name: string; email: string; isDefault?: boolean }
+
+/** All sending identities for a user: the saved list, or a synthesized one from from_name / from_email. */
+export function sendersFrom(settings: { from_name?: string | null; from_email?: string | null; data?: Record<string, unknown> | null } | null | undefined): SenderIdentity[] {
+  const raw = (settings?.data as { senders?: SenderIdentity[] } | undefined)?.senders;
+  const list = Array.isArray(raw) ? raw.filter((s) => s && typeof s.email === 'string' && s.email.includes('@')) : [];
+  if (list.length) {
+    if (!list.some((s) => s.isDefault)) list[0].isDefault = true;
+    return list;
+  }
+  if (settings?.from_email) return [{ id: 'legacy', name: settings.from_name || 'Klientic', email: settings.from_email, isDefault: true }];
+  return [];
+}
+
+/**
+ * Resolve the user's Resend key + from-address (their key first, env fallback).
+ * Pass `senderId` to send from one of the user's non-default identities.
+ */
+export async function resolveEmail(supabase: SupabaseClient, ownerId: string, senderId?: string | null) {
   const [{ data: secret }, { data: settings }] = await Promise.all([
     supabase.from('user_secrets').select('api_key, meta').eq('owner_id', ownerId).eq('provider', 'resend').maybeSingle(),
-    supabase.from('user_settings').select('from_name, from_email').eq('owner_id', ownerId).maybeSingle(),
+    supabase.from('user_settings').select('from_name, from_email, data').eq('owner_id', ownerId).maybeSingle(),
   ]);
   const apiKey = secret?.api_key || process.env.RESEND_API_KEY || '';
-  const fromEmail = settings?.from_email || (secret?.meta as { from_email?: string })?.from_email;
-  const fromName = settings?.from_name || 'Klientic';
+  const senders = sendersFrom(settings);
+  const chosen = (senderId && senders.find((s) => s.id === senderId)) || senders.find((s) => s.isDefault) || senders[0] || null;
+  const fromEmail = chosen?.email || (secret?.meta as { from_email?: string })?.from_email;
+  const fromName = chosen?.name || settings?.from_name || 'Klientic';
   const from = fromEmail ? `${fromName} <${fromEmail}>` : process.env.RESEND_FROM || 'Klientic <onboarding@resend.dev>';
-  return { apiKey, from };
+  return { apiKey, from, sender: chosen, senders };
 }
 
 export function textToHtml(text: string) {

@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, plainToHtml, isHtmlEmpty } from '@/components/RichEditor';
 import { isEmail } from '@/lib/csv';
+import { sendersFrom } from '@/lib/email/resend';
 import type { Lead } from '@/lib/types';
 
 type Picked = { id: string; email: string; company_name: string; contact_name: string | null; stage: string };
@@ -37,6 +38,8 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
   const [sugs, setSugs] = useState<Picked[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
   const toRef = useRef<HTMLInputElement>(null);
+  const senders = sendersFrom(settings);
+  const [fromId, setFromId] = useState<string>('');
 
   // prefill from a lead when opened from the lead drawer
   useEffect(() => {
@@ -50,8 +53,9 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       setPicked(null); setTo(''); setCompany(''); setContactName('');
     }
     setCc(''); setBcc(''); setShowCc(false); setSubject(''); setBody(''); setFiles([]); setSaveLead(true); setStartFollowups(true);
+    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || '');
     setTimeout(() => toRef.current?.focus(), 50);
-  }, [open, lead]);
+  }, [open, lead, settings]);
 
   // search leads while typing in "To"
   useEffect(() => {
@@ -102,6 +106,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       if (picked) fd.set('leadId', picked.id);
       else if (saveLead) { fd.set('saveLead', '1'); fd.set('company', company.trim()); fd.set('contactName', contactName.trim()); }
       if (startFollowups && (picked || saveLead)) fd.set('startFollowups', '1');
+      if (fromId) fd.set('fromId', fromId);
       files.forEach((f) => fd.append('files', f));
       const res = await fetch('/api/outreach/compose', { method: 'POST', body: fd });
       const data = await res.json();
@@ -112,13 +117,21 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
     finally { setBusy(null); }
   }
 
-  const fromLabel = settings?.from_email ? `${settings.from_name || 'Klientic'} <${settings.from_email}>` : 'Klientic sandbox sender (set yours in Settings → Email)';
   const isNewContact = !picked && isEmail(to.split(/[,;]/)[0]?.trim() || '');
 
   return (
     <Modal open={open} onClose={onClose} title="New email" wide>
       <div className="space-y-3">
-        <div className="text-[12px] text-faint">From <span className="font-semibold text-dim">{fromLabel}</span></div>
+        <div className="flex flex-wrap items-center gap-2 text-[12px] text-faint">
+          <span>From</span>
+          {senders.length > 1 ? (
+            <select className="input !w-auto !py-1.5 !text-[12.5px]" value={fromId} onChange={(e) => setFromId(e.target.value)} aria-label="Send from">
+              {senders.map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;{s.isDefault ? ' · default' : ''}</option>)}
+            </select>
+          ) : (
+            <span className="font-semibold text-dim">{senders[0] ? `${senders[0].name} <${senders[0].email}>` : 'Klientic sandbox sender (set yours in Settings → Email)'}</span>
+          )}
+        </div>
 
         {/* To */}
         <div className="field !mb-0">

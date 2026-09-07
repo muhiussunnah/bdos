@@ -128,6 +128,14 @@ export interface Report {
   created_at: string;
 }
 
+/** A sending identity. Stored as `user_settings.data.senders[]`; the default one mirrors from_name / from_email. */
+export interface Sender {
+  id: string;
+  name: string;
+  email: string;
+  isDefault?: boolean;
+}
+
 export interface UserSettings {
   owner_id: string;
   default_provider: string;
