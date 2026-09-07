@@ -76,7 +76,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (el && !htmlMode && el.innerHTML !== value) el.innerHTML = value || '';
   }, [value, htmlMode]);
 
-  const emit = useCallback(() => { if (ed.current) onChange(ed.current.innerHTML); }, [onChange]);
+  const emit = useCallback(() => {
+    const el = ed.current; if (!el) return;
+    if (el.querySelector('font')) normaliseFontsRef.current?.();
+    onChange(el.innerHTML);
+  }, [onChange]);
+  const normaliseFontsRef = useRef<(() => void) | null>(null);
 
   const saveSelection = () => {
     const s = window.getSelection();
@@ -104,18 +109,38 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     focus: () => ed.current?.focus(),
   }), [exec, insertHtml]);
 
-  function fontStep(delta: number) {
-    restoreSelection();
-    document.execCommand('styleWithCSS', false, 'true');
-    const cur = parseInt(document.queryCommandValue('fontSize') || '3', 10) || 3;
-    const next = Math.min(7, Math.max(1, cur + delta));
-    document.execCommand('fontSize', false, String(next));
-    // Chrome writes <font size>; normalise to inline font-size so email clients respect it
-    ed.current?.querySelectorAll('font[size]').forEach((f) => {
+  /**
+   * Font size: step the current size up/down by ~20%. execCommand('fontSize', 7)
+   * is used only as a marker — browsers wrap the affected text in <font size="7">,
+   * which we immediately (and on every later input, for collapsed carets)
+   * rewrite to an inline px font-size that email clients respect.
+   */
+  const pendingPx = useRef<number | null>(null);
+  const normaliseFonts = useCallback(() => {
+    const el = ed.current; if (!el) return;
+    el.querySelectorAll('font').forEach((f) => {
       const span = document.createElement('span');
-      span.style.fontSize = SIZES[Number(f.getAttribute('size')) - 1] || 'medium';
+      const size = Number(f.getAttribute('size'));
+      span.style.fontSize = size === 7 && pendingPx.current ? `${pendingPx.current}px` : (SIZES[size - 1] || 'medium');
+      if (f.getAttribute('color')) span.style.color = f.getAttribute('color')!;
       span.innerHTML = f.innerHTML; f.replaceWith(span);
     });
+  }, []);
+
+  useEffect(() => { normaliseFontsRef.current = normaliseFonts; }, [normaliseFonts]);
+
+  function fontStep(delta: number) {
+    restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const anchorEl = (node?.nodeType === 3 ? node.parentElement : (node as HTMLElement | null)) || ed.current;
+    const curPx = anchorEl ? parseFloat(getComputedStyle(anchorEl).fontSize) || 14 : 14;
+    const next = Math.round(Math.min(56, Math.max(9, curPx * (delta > 0 ? 1.2 : 1 / 1.2))));
+    pendingPx.current = next;
+    document.execCommand('styleWithCSS', false, 'false');
+    document.execCommand('fontSize', false, '7');
+    normaliseFonts();
     emit(); force((n) => n + 1);
   }
 
