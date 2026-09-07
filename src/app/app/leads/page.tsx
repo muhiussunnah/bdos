@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2 } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
@@ -22,7 +22,7 @@ const FILTERS = [
   { key: 'import', label: 'Imported' },
 ];
 
-type SortKey = 'company_name' | 'industry' | 'location' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
+type SortKey = 'company_name' | 'industry' | 'location' | 'email' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
 const STAGE_ORDER = ['new', 'contacted', 'followup1', 'followup2', 'followup3', 'positive', 'meeting', 'closed', 'lost'];
 
 function LeadsInner() {
@@ -146,6 +146,7 @@ function LeadsInner() {
                     <SortTh label="Company" k="company_name" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Industry" k="industry" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Location" k="location" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Email" k="email" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Fit" k="fit_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
                     <SortTh label="Opp." k="opportunity_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
                     <SortTh label="Prio" k="priority" sort={sort} onToggle={toggleSort} />
@@ -167,13 +168,22 @@ function LeadsInner() {
                       </td>
                       <td className="td text-dim">{l.industry || '—'}</td>
                       <td className="td text-dim">{l.location || '—'}</td>
+                      <td className="td">
+                        {l.email ? (
+                          <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">
+                            <Mail size={12} className="flex-none text-faint" /><span className="truncate">{l.email}</span>
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>no email</span>
+                        )}
+                      </td>
                       <td className="td"><Score value={l.fit_score} /></td>
                       <td className="td"><Score value={l.opportunity_score} /></td>
                       <td className="td"><PriorityTag p={l.priority} /></td>
                       <td className="td"><StageTag stage={l.stage} /></td>
                       <td className="td">
                         {l.contact_name ? <div className="font-semibold text-ink">{l.contact_name}</div> : <span className="text-faint">—</span>}
-                        {l.email && <div className="text-[11.5px] text-faint">{l.email}</div>}
+                        {l.role && <div className="text-[11.5px] text-faint">{l.role}</div>}
                       </td>
                       <td className="td whitespace-nowrap text-[12px] text-faint">{new Date(l.created_at).toLocaleDateString()}</td>
                       <td className="td !pl-0">
@@ -246,7 +256,7 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success(`${data.count} leads added to the pipeline`);
+      toast.success(`${data.count} leads with email added to the pipeline${data.droppedNoEmail ? ` · ${data.droppedNoEmail} skipped (no email)` : ''}`);
       onDone(); onClose(); setKeywords([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Discovery failed');
@@ -257,7 +267,7 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
 
   return (
     <Modal open={open} onClose={onClose} title="Find leads with AI">
-      <p className="mb-4 text-[13px] text-dim">The agent searches for organisations that fit {project?.name}, scores each on fit &amp; opportunity, and drops them into your pipeline.</p>
+      <p className="mb-4 text-[13px] text-dim">The agent searches for organisations that fit {project?.name}, scores each on fit &amp; opportunity, and drops them into your pipeline. Only organisations with a real contact email are added — no email, no lead.</p>
 
       <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-faint">Where</div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -301,6 +311,7 @@ function ManualModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
 
   async function save() {
     if (!project || !f.company_name) return toast.error('Company name is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) return toast.error('A valid email is required — leads without email cannot be contacted');
     setBusy(true);
     const { error } = await supabase.from('leads').insert({
       ...f, project_id: project.id, owner_id: user.id, source: 'manual',
@@ -317,7 +328,7 @@ function ManualModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
     <Modal open={open} onClose={onClose} title="Add a lead">
       <div className="grid grid-cols-2 gap-3">
         {([['company_name', 'Company *'], ['website', 'Website'], ['industry', 'Industry'], ['location', 'Location'],
-          ['contact_name', 'Contact name'], ['role', 'Role'], ['email', 'Email'], ['phone', 'Phone']] as const).map(([k, label]) => (
+          ['contact_name', 'Contact name'], ['role', 'Role'], ['email', 'Email *'], ['phone', 'Phone']] as const).map(([k, label]) => (
           <div className="field" key={k}><label>{label}</label>
             <input className="input" value={f[k]} onChange={(e) => set(k, e.target.value)} /></div>
         ))}

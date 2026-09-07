@@ -3,6 +3,7 @@ import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { discoveryPrompt, describeGeo } from '@/lib/ai/prompts';
 import { priorityFromScores } from '@/lib/utils';
+import { isEmail } from '@/lib/csv';
 import type { Project } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -54,7 +55,20 @@ export async function POST(req: Request) {
     return bad(e instanceof Error ? e.message : 'AI request failed', 502);
   }
 
-  const rows = (result.leads || []).slice(0, n).map((l) => {
+  // email is mandatory — a lead we cannot email is not a lead. Also skip addresses already in the project.
+  const { data: existing } = await supabase.from('leads').select('email').eq('project_id', projectId).not('email', 'is', null);
+  const seen = new Set((existing || []).map((r) => String(r.email).toLowerCase()));
+  const found = result.leads || [];
+  const withEmail = found.filter((l) => {
+    const e = String(l.email || '').trim().toLowerCase();
+    if (!isEmail(e) || /example\.com$|@test\.|@email\.com$|noreply|no-reply/i.test(e)) return false;
+    if (seen.has(e)) return false;
+    seen.add(e); l.email = e;
+    return true;
+  });
+  const droppedNoEmail = found.length - withEmail.length;
+
+  const rows = withEmail.slice(0, n).map((l) => {
     const fit = clamp(l.fit_score);
     const opp = clamp(l.opportunity_score);
     return {
@@ -68,13 +82,17 @@ export async function POST(req: Request) {
       tags: categories.length > 1 && l.industry ? [l.industry] : categories.slice(0, 1),
     };
   });
-  if (!rows.length) return bad('No leads returned — try a broader category.', 502);
+  if (!rows.length) {
+    return bad(found.length
+      ? `The agent found ${found.length} organisations but none with a usable email address (or they are already in your pipeline). Try a broader area or different niches.`
+      : 'No leads returned — try a broader category.', 502);
+  }
 
   const { data: inserted, error } = await supabase.from('leads').insert(rows).select();
   if (error) return bad(error.message, 500);
 
-  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}`);
-  return ok({ leads: inserted, count: inserted?.length || 0 });
+  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}`, { droppedNoEmail });
+  return ok({ leads: inserted, count: inserted?.length || 0, droppedNoEmail });
 }
 
 function clamp(n?: number) {

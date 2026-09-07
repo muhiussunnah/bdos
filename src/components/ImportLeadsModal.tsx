@@ -35,20 +35,22 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
   }
 
   const leads = rows ? rowsToLeads(rows, mapping, hasHeader) : [];
+  const [requireEmail, setRequireEmail] = useState(true);
   const withEmail = leads.filter((l) => isEmail(l.email)).length;
-  const usable = leads.filter((l) => l.company_name || isEmail(l.email)).length;
+  const toImport = leads.filter((l) => (requireEmail ? isEmail(l.email) : l.company_name || isEmail(l.email)));
+  const usable = toImport.length;
   const cols = rows ? Math.max(...rows.map((r) => r.length)) : 0;
   const headers = rows ? (hasHeader ? rows[0] : Array.from({ length: cols }, (_, i) => `Column ${i + 1}`)) : [];
   const preview = rows ? (hasHeader ? rows.slice(1, 4) : rows.slice(0, 3)) : [];
 
   async function run() {
     if (!project || !leads.length) return;
-    if (!usable) return toast.error('Map at least a Company or Email column');
+    if (!usable) return toast.error(requireEmail ? 'No rows with a valid email — map the Email column or allow rows without email' : 'Map at least a Company or Email column');
     setBusy(true);
     try {
       const res = await fetch('/api/leads/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, leads, tag: tag.trim() || undefined }),
+        body: JSON.stringify({ projectId: project.id, leads: toImport, tag: tag.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -99,6 +101,10 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
             </label>
             <span className="text-faint">·</span>
             <span className="text-dim"><b className="text-ink">{leads.length}</b> rows · <b className="text-ink">{withEmail}</b> with a valid email</span>
+            <span className="text-faint">·</span>
+            <label className="flex items-center gap-2 font-semibold text-ink" title="Leads without an email cannot be contacted by the agent">
+              <input type="checkbox" checked={requireEmail} onChange={(e) => setRequireEmail(e.target.checked)} /> Skip rows without email
+            </label>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-line">
