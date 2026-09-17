@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ChevronDown, Plus, Shield, Check } from 'lucide-react';
 import { NAV, NAV_GROUPS, BRAND } from '@/lib/constants';
+import { CURRENT_VERSION } from '@/lib/changelog';
 import { useApp } from '@/components/providers/AppProvider';
 import { Icon } from '@/components/Icon';
 import { LogoMark } from '@/components/Logo';
@@ -78,7 +79,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               </div>
               {NAV.filter((n) => n.group === g).map((n) => {
                 const active = path === n.href || path.startsWith(n.href + '/');
-                const badge = n.badgeKey === 'inbox' ? counts.inbox : n.badgeKey === 'tasks' ? counts.tasks : 0;
+                const badge = n.badgeKey === 'inbox' ? counts.inbox : n.badgeKey === 'tasks' ? counts.tasks : n.badgeKey === 'followups' ? counts.followups : 0;
                 return (
                   <Link key={n.href} href={n.href} onClick={onClose}
                     className={cn(
@@ -120,12 +121,17 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           )}
         </nav>
 
-        {/* agent status */}
+        {/* agent status + version */}
         <div className="mt-auto border-t border-white/10 px-2.5 pb-0.5 pt-3">
           <div className="flex items-center gap-2.5 px-1 py-1.5 text-[12px] text-white/60">
             <span className="animate-pulse2 h-2 w-2 rounded-full" style={{ background: 'var(--green)' }} />
             Sales agent · {project?.name || 'idle'}
           </div>
+          <Link href="/app/changelog" onClick={onClose}
+            className="mono flex items-center justify-between rounded-lg px-1 py-1 text-[11px] font-bold text-white/35 transition hover:text-white/70">
+            <span>v{CURRENT_VERSION}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">What&rsquo;s new</span>
+          </Link>
         </div>
       </aside>
     </>

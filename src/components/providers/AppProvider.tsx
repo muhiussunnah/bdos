@@ -12,7 +12,7 @@ interface AppState {
   projects: Project[];
   project: Project | null;
   settings: UserSettings | null;
-  counts: { inbox: number; tasks: number };
+  counts: { inbox: number; tasks: number; followups: number };
   setProjectId: (id: string) => void;
   refreshProjects: () => Promise<Project[]>;
   refreshCounts: () => Promise<void>;
@@ -48,7 +48,7 @@ export function AppProvider({
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [settings, setSettings] = useState<UserSettings | null>(initialSettings);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [counts, setCounts] = useState({ inbox: 0, tasks: 0 });
+  const [counts, setCounts] = useState({ inbox: 0, tasks: 0, followups: 0 });
 
   // pick the active project once projects are known
   useEffect(() => {
@@ -93,13 +93,17 @@ export function AppProvider({
 
   const refreshCounts = useCallback(async () => {
     if (!activeId) return;
-    const [{ count: inbox }, { count: tasks }] = await Promise.all([
+    const nowIso = new Date().toISOString();
+    const [{ count: inbox }, { count: tasks }, { count: followups }] = await Promise.all([
       supabase.from('messages').select('id', { count: 'exact', head: true })
         .eq('project_id', activeId).eq('direction', 'inbound').eq('handled', false),
       supabase.from('tasks').select('id', { count: 'exact', head: true })
         .eq('project_id', activeId).eq('status', 'open'),
+      supabase.from('leads').select('id', { count: 'exact', head: true })
+        .eq('project_id', activeId).in('stage', ['contacted', 'followup1', 'followup2', 'followup3'])
+        .not('next_action_at', 'is', null).lte('next_action_at', nowIso),
     ]);
-    setCounts({ inbox: inbox || 0, tasks: tasks || 0 });
+    setCounts({ inbox: inbox || 0, tasks: tasks || 0, followups: followups || 0 });
   }, [supabase, activeId]);
 
   useEffect(() => {
