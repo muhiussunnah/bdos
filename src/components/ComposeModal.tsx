@@ -7,6 +7,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, plainToHtml, isHtmlEmpty } from '@/components/RichEditor';
+import { SubjectInput, rememberSubject } from '@/components/SubjectInput';
 import { isEmail } from '@/lib/csv';
 import { sendersFrom } from '@/lib/email/resend';
 import type { Lead } from '@/lib/types';
@@ -111,6 +112,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       const res = await fetch('/api/outreach/compose', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      rememberSubject(subject);
       toast.success(`Sent to ${primary}`);
       onSent?.(); onClose();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed'); }
@@ -192,7 +194,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
         )}
 
         <div className="field !mb-0"><label>Subject</label>
-          <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" /></div>
+          <SubjectInput value={subject} onChange={setSubject} placeholder="Subject" /></div>
 
         <div className="field !mb-0">
           <div className="flex items-center justify-between"><label>Message</label>

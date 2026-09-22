@@ -27,6 +27,19 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.1',
+    date: '2026-09-22',
+    title: 'Conversations, date filters & captured replies',
+    tag: 'feature',
+    notes: [
+      'New "Inbox" stage: only conversations where the lead has actually replied. "Waiting for answer" now means it is your turn — once you reply it moves out automatically.',
+      'Click any email to open the whole conversation, first message to latest, Gmail-style, with a reply box and booked / follow-up / sold buttons.',
+      'Date range on every stage: last 7 days, last 30 days, this year, last year, lifetime (remembered).',
+      'Subject field suggests the last 3 subjects you used.',
+      'Replies to your famies.app / fammap.app mailboxes are forwarded into Klientic, so they land in the pipeline automatically.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-09-17',
     title: 'Inbox pipeline, Follow-ups & Changelog',

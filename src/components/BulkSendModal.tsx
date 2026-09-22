@@ -8,6 +8,7 @@ import { Modal, StageTag } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, isHtmlEmpty, type RichEditorHandle } from '@/components/RichEditor';
+import { SubjectInput, rememberSubject } from '@/components/SubjectInput';
 import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import { sendersFrom } from '@/lib/email/resend';
 import type { Lead } from '@/lib/types';
@@ -170,6 +171,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
         setResults([...all]); setProgress({ done: Math.min(i + CHUNK, list.length), total: list.length });
       }
       const okCount = all.filter((r) => r.ok).length;
+      if (okCount) rememberSubject(subject);
       toast.success(`${okCount} of ${list.length} emails sent`);
       onDone?.();
     } catch (e) {
@@ -276,7 +278,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
               </select></div>
           )}
           <div className="field !mb-0"><label>Subject</label>
-            <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Quick question for {{company}}" /></div>
+            <SubjectInput value={subject} onChange={setSubject} placeholder="Quick question for {{company}}" /></div>
           <div className="field !mb-0">
             <div className="flex flex-wrap items-center justify-between gap-2"><label>Message</label>
               <div className="flex flex-wrap gap-1">
