@@ -51,10 +51,13 @@ export async function POST(req: Request) {
   const emailId = event.data.email_id;
   const recipients = [...(event.data.to || []), ...(event.data.received_for || [])].map((a) => extractAddress(a));
 
-  // 1. which user owns the recipient address?
+  // 1. which user owns the recipient address? (forwarded mail: the original address is in received_for / To)
   const { data: settingsRows } = await admin.from('user_settings').select('owner_id, from_name, from_email, data');
-  const owner = pickOwner((settingsRows || []) as { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients);
-  if (!owner) return ignore('no user with this sending address');
+  const match = pickOwner((settingsRows || []) as { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients);
+  if (!match) return ignore('no user with this sending address');
+  const owner = match.owner;
+  // the identity that received it → replies go out from the same address
+  const receivedAt = match.email || recipients[0] || null;
 
   // 2. fetch the full email with the owner's key (also proves the event is genuine)
   const { data: secretRow } = await admin.from('user_secrets').select('api_key').eq('owner_id', owner).eq('provider', 'resend').maybeSingle();
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
   const { data: created, error } = await admin.from('messages').insert({
     project_id: projectId, owner_id: owner, lead_id: lead?.id || null,
     direction: 'inbound', status: 'received', subject, body: body.slice(0, 20000),
-    from_email: sender, to_email: recipients[0] || null, provider_message_id: emailId,
+    from_email: sender, to_email: receivedAt, provider_message_id: emailId,
     ai_meta: { source: 'resend', message_id: mail.message_id || event.data.message_id || null, attachments, headers_from: mail.headers?.from || null },
   }).select('id').single();
   if (error || !created) return NextResponse.json({ error: error?.message || 'insert failed' }, { status: 500 });
@@ -150,18 +153,30 @@ function isAutomatedSender(sender: string, subject: string): boolean {
   const local = sender.split('@')[0] || '';
   if (/^(no-?reply|noreply-[\w-]*|do-?not-?reply|mailer-daemon|postmaster|bounces?|dmarc[\w-]*|abuse|notifications?)$/i.test(local)) return true;
   if (/-replies@|^noreply-dmarc|dmarc-support|marketing-email/i.test(sender)) return true;
+  // system / newsletter subdomains (info.hostinger.com, news.x.com, mail.x.com …) — never a prospect
+  if (/@(info|news|newsletter|mail|email|noreply|no-reply|notifications?|alerts?|team)\./i.test(sender)) return true;
+  if (/^(team|hello|newsletter|marketing|billing|accounts?)@/i.test(sender) && /hostinger|vercel|resend|supabase|google|github|stripe/i.test(sender)) return true;
   if (/^report domain:/i.test(subject)) return true;
   return false;
 }
 
-function pickOwner(rows: { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients: string[]): string | null {
+/** Which user owns one of the recipient addresses, and which of their identities it was. */
+function pickOwner(rows: { owner_id: string; from_name: string | null; from_email: string | null; data: Record<string, unknown> | null }[], recipients: string[]): { owner: string; email: string | null } | null {
   // every sending identity a user has (multiple senders live in data.senders)
   const owned = rows.flatMap((r) => sendersFrom(r).map((s) => ({ owner: r.owner_id, email: s.email.trim().toLowerCase() })));
-  const exact = owned.find((o) => recipients.includes(o.email));
-  if (exact) return exact.owner;
-  const domains = new Set(recipients.map((a) => a.split('@')[1]).filter(Boolean));
-  const byDomain = owned.find((o) => domains.has(o.email.split('@')[1]));
-  return byDomain?.owner || null;
+  // prefer an exact identity match anywhere in the recipient chain (forwarded mail lists the
+  // forwarding target first, the original address later)
+  for (const rcpt of recipients) {
+    const hit = owned.find((o) => o.email === rcpt);
+    if (hit) return { owner: hit.owner, email: hit.email };
+  }
+  // otherwise a domain the user sends from (catch-all: alan@famies.app → any famies.app identity)
+  for (const rcpt of recipients) {
+    const dom = rcpt.split('@')[1];
+    const hit = dom && owned.find((o) => o.email.split('@')[1] === dom);
+    if (hit) return { owner: hit.owner, email: rcpt };
+  }
+  return null;
 }
 
 /** Standard Svix signature check: HMAC-SHA256(`${id}.${ts}.${body}`) with the base64 secret after "whsec_". */
