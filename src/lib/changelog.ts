@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.2',
+    date: '2026-09-23',
+    title: 'Delete anywhere, call from follow-ups, history on every card',
+    tag: 'improvement',
+    notes: [
+      'Every three-dot menu in the pipeline now has "Delete lead" (with confirmation), and the conversation drawer has a delete button too.',
+      'Follow-up rows show the phone number as a tap-to-call link, plus a clickable email.',
+      'Booked meeting and To sale cards open the full conversation history by default — first message to latest, with a reply box. "History" and "Open lead details" are in the menu.',
+      'Cards show how many messages were exchanged and how many came from the lead.',
+    ],
+  },
+  {
     version: '1.1.1',
     date: '2026-09-22',
     title: 'Conversations, date filters & captured replies',

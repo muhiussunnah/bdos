@@ -4,11 +4,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, AlertTriangle, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
-  Mail, Paperclip, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays,
+  Mail, Paperclip, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays, Trash2, Phone,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal } from '@/components/ui';
-import { usePager, Pagination } from '@/components/listing';
+import { usePager, Pagination, ConfirmDialog } from '@/components/listing';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
@@ -43,6 +43,8 @@ export default function InboxPage() {
   const [composeLead, setComposeLead] = useState<Lead | null>(null);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { try { const r = localStorage.getItem(LS_RANGE) as RangeKey | null; if (r && RANGES.some((x) => x.key === r)) setRange(r); } catch { /* ignore */ } }, []);
   const pickRange = (r: RangeKey) => { setRange(r); try { localStorage.setItem(LS_RANGE, r); } catch { /* ignore */ } };
@@ -99,7 +101,20 @@ export default function InboxPage() {
     { label: 'Mark as booked meeting', icon: <CalendarCheck size={14} />, run: () => moveLead(leadId, 'meeting') },
     { label: 'Mark as follow-up', icon: <Repeat size={14} />, run: () => moveLead(leadId, 'followup1') },
     { label: 'Mark as sold', icon: <Trophy size={14} />, run: () => moveLead(leadId, 'closed') },
+    ...(leadId ? [{ label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete(leadId) }] : []),
   ];
+  const openConversationOrLead = (l: Lead) => { const t = threadForLead(l.id); if (t) setThreadKey(t.key); else setDrawerLead(l); };
+
+  async function doDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.from('leads').delete().eq('id', confirmDelete);
+    setDeleting(false);
+    if (error) return toast.error(error.message);
+    toast.success('Lead deleted');
+    setConfirmDelete(null); setThreadKey(null); setDrawerLead(null);
+    load(); refreshCounts();
+  }
   const openThreadFor = (m: Message) => setThreadKey(m.lead_id ? `lead:${m.lead_id}` : threads.find((t) => t.messages.some((x) => x.id === m.id))?.key || null);
   const refresh = () => { load(); refreshCounts(); };
   const current = STAGES.find((s) => s.key === stage)!;
@@ -148,14 +163,16 @@ export default function InboxPage() {
             <ThreadList threads={stage === 'inbox' ? inboxThreads : waitingThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)}
               empty={stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
           )}
-          {stage === 'meeting' && <LeadList leads={meetingLeads} q={q} empty="No booked meetings yet. Answer a reply and mark it as a booked meeting." onOpen={setDrawerLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
-          {stage === 'followup' && <FollowupList leads={followupLeads} q={q} onOpen={setDrawerLead} onWrite={setComposeLead} onChange={refresh} />}
-          {stage === 'sale' && <LeadList leads={saleLeads} q={q} empty="No sales yet. Mark a won conversation as sold to see it here." onOpen={setDrawerLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
+          {stage === 'meeting' && <LeadList leads={meetingLeads} q={q} empty="No booked meetings yet. Answer a reply and mark it as a booked meeting." onOpen={openConversationOrLead} onOpenLead={setDrawerLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
+          {stage === 'followup' && <FollowupList leads={followupLeads} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
+          {stage === 'sale' && <LeadList leads={saleLeads} q={q} empty="No sales yet. Mark a won conversation as sold to see it here." onOpen={openConversationOrLead} onOpenLead={setDrawerLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
         </>
       )}
 
       <ThreadDrawer thread={threadKey ? threadByKey[threadKey] || null : null} onClose={() => setThreadKey(null)} onChange={refresh}
-        onMove={(id, s) => moveLead(id, s)} onOpenLead={(l) => { setThreadKey(null); setDrawerLead(l); }} />
+        onMove={(id, s) => moveLead(id, s)} onOpenLead={(l) => { setThreadKey(null); setDrawerLead(l); }} onDelete={(id) => setConfirmDelete(id)} />
+      <ConfirmDialog open={!!confirmDelete} busy={deleting} onCancel={() => setConfirmDelete(null)} onConfirm={doDelete} title="Delete this lead?"
+        body={<>This permanently removes <b className="text-ink">{confirmDelete ? leadById[confirmDelete]?.company_name || 'the lead' : ''}</b> together with every email, reply and task linked to it. This cannot be undone.</>} />
       <LeadDrawer lead={drawerLead} onClose={() => setDrawerLead(null)} onChange={refresh} />
       <ComposeModal open={!!composeLead} lead={composeLead} onClose={() => setComposeLead(null)} onSent={refresh} />
       {logOpen && <LogReplyModal projectId={project.id} leads={leads} onClose={() => setLogOpen(false)} onDone={() => { setStage('waiting'); refresh(); }} />}
@@ -164,7 +181,7 @@ export default function InboxPage() {
 }
 
 /* ── three-dot menu ─────────────────────────────────────────────────────────── */
-function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; run: () => void }[] }) {
+function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -181,7 +198,7 @@ function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; r
         <div className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
           {items.map((it) => (
             <button key={it.label} onClick={(e) => { e.stopPropagation(); setOpen(false); it.run(); }}
-              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-semibold text-ink transition hover:bg-surface-2">{it.icon}{it.label}</button>
+              className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-semibold transition hover:bg-surface-2 ${it.danger ? 'border-t border-line text-bad' : 'text-ink'}`}>{it.icon}{it.label}</button>
           ))}
         </div>
       )}
@@ -189,7 +206,7 @@ function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; r
   );
 }
 
-type MenuFor = (leadId: string | null | undefined, threadKey?: string | null) => { label: string; icon?: React.ReactNode; run: () => void }[];
+type MenuFor = (leadId: string | null | undefined, threadKey?: string | null) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 
 /* ── First outreach: sent emails ─────────────────────────────────────────────── */
 function OutreachList({ items, leadById, q, menuFor, onOpen, threadKeyOf }: {
@@ -268,24 +285,38 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
 }
 
 /* ── Booked meeting / To sale: lead cards ─────────────────────────────────────── */
-function LeadList({ leads, q, empty, onOpen, menuFor }: { leads: Lead[]; q: string; empty: string; onOpen: (l: Lead) => void; menuFor: (leadId: string) => { label: string; icon?: React.ReactNode; run: () => void }[] }) {
+function LeadList({ leads, q, empty, onOpen, onOpenLead, threadFor, menuFor }: {
+  leads: Lead[]; q: string; empty: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void;
+  threadFor: (leadId: string) => Thread | null; menuFor: (leadId: string) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
+}) {
   const filtered = leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email}`.toLowerCase().includes(q.toLowerCase()));
   if (!filtered.length) return <Card><EmptyState icon={<Trophy size={38} />} title={q ? 'No matches' : 'Nothing here yet'} sub={empty} /></Card>;
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {filtered.map((l) => (
-        <Card key={l.id} className="!p-4">
-          <div className="flex items-start gap-2">
-            <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left">
-              <div className="truncate font-bold text-ink">{l.company_name}</div>
-              {l.contact_name && <div className="truncate text-[12.5px] text-dim">{l.contact_name}{l.role ? ` · ${l.role}` : ''}</div>}
-              {l.email && <div className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-faint"><Mail size={11} /> {l.email}</div>}
-            </button>
-            <ThreeDot items={[{ label: 'Open lead', icon: <ArrowRight size={14} />, run: () => onOpen(l) }, ...menuFor(l.id)]} />
-          </div>
-          {l.last_contacted_at && <div className="mt-2 text-[11.5px] text-faint">Last contacted {relTime(l.last_contacted_at)}</div>}
-        </Card>
-      ))}
+      {filtered.map((l) => {
+        const t = threadFor(l.id);
+        return (
+          <Card key={l.id} className="!p-4">
+            <div className="flex items-start gap-2">
+              <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left" title={t ? 'Open the full conversation' : 'Open lead'}>
+                <div className="truncate font-bold text-ink">{l.company_name}</div>
+                {l.contact_name && <div className="truncate text-[12.5px] text-dim">{l.contact_name}{l.role ? ` · ${l.role}` : ''}</div>}
+                {l.email && <div className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-faint"><Mail size={11} /> {l.email}</div>}
+                {l.phone && <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-faint"><Phone size={11} /> {l.phone}</div>}
+              </button>
+              <ThreeDot items={[
+                { label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) },
+                { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },
+                ...menuFor(l.id).filter((m) => m.label !== 'Open conversation'),
+              ]} />
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
+              {t ? <span className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-px font-semibold text-dim"><MessagesSquare size={11} /> {t.messages.length} msg · {t.inboundCount} from them</span> : <span>No messages yet</span>}
+              {l.last_contacted_at && <span className="ml-auto">Last contact {relTime(l.last_contacted_at)}</span>}
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }
