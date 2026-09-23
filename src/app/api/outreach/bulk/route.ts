@@ -1,12 +1,12 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
-import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText } from '@/lib/email/resend';
+import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText, parseAddressList } from '@/lib/email/resend';
 import { isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
 
 export const runtime = 'edge';
 
 interface Recipient { email: string; name?: string | null; company?: string | null; role?: string | null; website?: string | null; leadId?: string | null }
-interface Payload { projectId: string; subject: string; body: string; html?: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string; fromId?: string | null }
+interface Payload { projectId: string; subject: string; body: string; html?: string; recipients: Recipient[]; startFollowups?: boolean; batchId?: string; fromId?: string | null; cc?: string; bcc?: string }
 
 const MAX_PER_REQUEST = 25;
 
@@ -29,6 +29,9 @@ export async function POST(req: Request) {
   catch { return bad('Invalid payload'); }
 
   const { projectId, subject, startFollowups = true, batchId } = payload;
+  const cc = parseAddressList(payload.cc), bcc = parseAddressList(payload.bcc);
+  const badCc = [...cc, ...bcc].find((a) => !isEmail(a));
+  if (badCc) return bad(`"${badCc}" is not a valid email address`);
   const richHtml = (payload.html || '').trim();
   const body = richHtml ? htmlToText(richHtml) : (payload.body || '');
   const recipients = Array.isArray(payload.recipients) ? payload.recipients : [];
@@ -74,10 +77,10 @@ export async function POST(req: Request) {
     const base = {
       lead_id: lead?.id || null, project_id: projectId, owner_id: userId, direction: 'outbound' as const,
       subject: subj, body: text, to_email: email, from_email: from,
-      ai_meta: { manual: true, mode: 'bulk', batchId: batchId || null, attachments: attachmentNames, ...(richHtml ? { html: renderTemplate(richHtml, vars) } : {}) },
+      ai_meta: { manual: true, mode: 'bulk', batchId: batchId || null, attachments: attachmentNames, cc, bcc, ...(richHtml ? { html: renderTemplate(richHtml, vars) } : {}) },
     };
     try {
-      const sent = await sendEmail({ to: email, subject: subj, html: htmlOut, text: text || subj, from, apiKey, attachments });
+      const sent = await sendEmail({ to: email, cc, bcc, subject: subj, html: htmlOut, text: text || subj, from, apiKey, attachments });
       await supabase.from('messages').insert({ ...base, status: 'sent', provider_message_id: sent.id, sent_at: new Date().toISOString() });
       if (lead) {
         const now = new Date().toISOString();

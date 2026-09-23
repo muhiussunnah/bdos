@@ -37,6 +37,9 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const { project, supabase, settings } = useApp();
   const senders = sendersFrom(settings);
   const [fromId, setFromId] = useState('');
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
+  const [showCc, setShowCc] = useState(false);
   const [step, setStep] = useState<Step>('recipients');
   const [source, setSource] = useState<Source>('csv');
 
@@ -68,7 +71,8 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     setStep('recipients'); setSource('csv'); setRows(null); setCsvName(null); setAlsoImport(true);
     setSelected(new Set()); setQ(''); setLeadFilter('all'); setSubject(''); setBody(''); setFiles([]);
     setStartFollowups(true); setProgress({ done: 0, total: 0 }); setResults([]); setBusy(false);
-    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || '');
+    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || sendersFrom(settings)[0]?.id || '');
+    setCc(''); setBcc(''); setShowCc(false);
     if (project) {
       supabase.from('leads').select('*').eq('project_id', project.id).not('email', 'is', null).order('created_at', { ascending: false })
         .then(({ data }) => setLeads((data as Lead[]) || []));
@@ -160,7 +164,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
       for (let i = 0; i < list.length; i += CHUNK) {
         const chunk = list.slice(i, i + CHUNK);
         const fd = new FormData();
-        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId, fromId: fromId || null }));
+        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId, fromId: fromId || null, cc, bcc }));
         files.forEach((f) => fd.append('files', f));
         const res = await fetch('/api/outreach/bulk', { method: 'POST', body: fd });
         const data = await res.json().catch(() => ({}));
@@ -271,11 +275,21 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
 
       {step === 'message' && (
         <div className="space-y-3">
-          {senders.length > 1 && (
-            <div className="field !mb-0"><label>Send from</label>
-              <select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}>
+          <div className="field !mb-0">
+            <div className="flex items-center justify-between"><label>Send from</label>
+              {!showCc && <button type="button" onClick={() => setShowCc(true)} className="text-[12px] font-bold text-accent hover:underline">Cc / Bcc</button>}
+            </div>
+            {senders.length ? (
+              <select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)} aria-label="Send from">
                 {senders.map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;{s.isDefault ? ' · default' : ''}</option>)}
-              </select></div>
+              </select>
+            ) : <div className="input !bg-surface-2 text-[12.5px] text-dim">Klientic sandbox sender — add your own in Settings → Email</div>}
+          </div>
+          {showCc && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="field !mb-0"><label>Cc <span className="text-faint">(every email)</span></label><input className="input" value={cc} onChange={(e) => setCc(e.target.value)} placeholder="comma separated" /></div>
+              <div className="field !mb-0"><label>Bcc <span className="text-faint">(every email)</span></label><input className="input" value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="comma separated" /></div>
+            </div>
           )}
           <div className="field !mb-0"><label>Subject</label>
             <SubjectInput value={subject} onChange={setSubject} placeholder="Quick question for {{company}}" /></div>

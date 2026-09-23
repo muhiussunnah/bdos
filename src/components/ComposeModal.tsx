@@ -54,7 +54,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       setPicked(null); setTo(''); setCompany(''); setContactName('');
     }
     setCc(''); setBcc(''); setShowCc(false); setSubject(''); setBody(''); setFiles([]); setSaveLead(true); setStartFollowups(true);
-    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || '');
+    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || sendersFrom(settings)[0]?.id || '');
     setTimeout(() => toRef.current?.focus(), 50);
   }, [open, lead, settings]);
 
@@ -126,12 +126,12 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-faint">
           <span>From</span>
-          {senders.length > 1 ? (
+          {senders.length ? (
             <select className="input !w-auto !py-1.5 !text-[12.5px]" value={fromId} onChange={(e) => setFromId(e.target.value)} aria-label="Send from">
               {senders.map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;{s.isDefault ? ' · default' : ''}</option>)}
             </select>
           ) : (
-            <span className="font-semibold text-dim">{senders[0] ? `${senders[0].name} <${senders[0].email}>` : 'Klientic sandbox sender (set yours in Settings → Email)'}</span>
+            <span className="font-semibold text-dim">Klientic sandbox sender (set yours in Settings → Email)</span>
           )}
         </div>
 
