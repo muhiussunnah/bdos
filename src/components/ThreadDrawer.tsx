@@ -12,7 +12,7 @@ import type { Lead } from '@/lib/types';
  * Gmail-style conversation view: every message exchanged with this lead,
  * oldest first, with a reply box at the bottom.
  */
-export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, onDelete }: {
+export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, onDelete, onDeleteThread }: {
   thread: Thread | null; onClose: () => void; onChange: () => void;
   onMove: (leadId: string | null, stage: 'meeting' | 'followup1' | 'closed') => void;
   onOpenLead: (lead: Lead) => void;
