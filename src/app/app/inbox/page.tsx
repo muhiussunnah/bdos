@@ -43,7 +43,8 @@ export default function InboxPage() {
   const [composeLead, setComposeLead] = useState<Lead | null>(null);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // either a lead id (deletes the lead + everything linked) or a thread key (deletes just those messages)
+  const [confirmDelete, setConfirmDelete] = useState<{ leadId?: string; threadKey?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { try { const r = localStorage.getItem(LS_RANGE) as RangeKey | null; if (r && RANGES.some((x) => x.key === r)) setRange(r); } catch { /* ignore */ } }, []);
@@ -101,17 +102,25 @@ export default function InboxPage() {
     { label: 'Mark as booked meeting', icon: <CalendarCheck size={14} />, run: () => moveLead(leadId, 'meeting') },
     { label: 'Mark as follow-up', icon: <Repeat size={14} />, run: () => moveLead(leadId, 'followup1') },
     { label: 'Mark as sold', icon: <Trophy size={14} />, run: () => moveLead(leadId, 'closed') },
-    ...(leadId ? [{ label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete(leadId) }] : []),
+    leadId
+      ? { label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete({ leadId }) }
+      : { label: 'Delete conversation', icon: <Trash2 size={14} />, danger: true, run: () => threadK && setConfirmDelete({ threadKey: threadK }) },
   ];
   const openConversationOrLead = (l: Lead) => { const t = threadForLead(l.id); if (t) setThreadKey(t.key); else setDrawerLead(l); };
 
   async function doDelete() {
     if (!confirmDelete) return;
     setDeleting(true);
-    const { error } = await supabase.from('leads').delete().eq('id', confirmDelete);
+    let error: { message: string } | null = null;
+    if (confirmDelete.leadId) {
+      ({ error } = await supabase.from('leads').delete().eq('id', confirmDelete.leadId));
+    } else if (confirmDelete.threadKey) {
+      const ids = (threadByKey[confirmDelete.threadKey]?.messages || []).map((m) => m.id);
+      if (ids.length) ({ error } = await supabase.from('messages').delete().in('id', ids));
+    }
     setDeleting(false);
     if (error) return toast.error(error.message);
-    toast.success('Lead deleted');
+    toast.success(confirmDelete.leadId ? 'Lead deleted' : 'Conversation deleted');
     setConfirmDelete(null); setThreadKey(null); setDrawerLead(null);
     load(); refreshCounts();
   }
@@ -170,9 +179,13 @@ export default function InboxPage() {
       )}
 
       <ThreadDrawer thread={threadKey ? threadByKey[threadKey] || null : null} onClose={() => setThreadKey(null)} onChange={refresh}
-        onMove={(id, s) => moveLead(id, s)} onOpenLead={(l) => { setThreadKey(null); setDrawerLead(l); }} onDelete={(id) => setConfirmDelete(id)} />
-      <ConfirmDialog open={!!confirmDelete} busy={deleting} onCancel={() => setConfirmDelete(null)} onConfirm={doDelete} title="Delete this lead?"
-        body={<>This permanently removes <b className="text-ink">{confirmDelete ? leadById[confirmDelete]?.company_name || 'the lead' : ''}</b> together with every email, reply and task linked to it. This cannot be undone.</>} />
+        onMove={(id, s) => moveLead(id, s)} onOpenLead={(l) => { setThreadKey(null); setDrawerLead(l); }}
+        onDelete={(id) => setConfirmDelete({ leadId: id })} onDeleteThread={(key) => setConfirmDelete({ threadKey: key })} />
+      <ConfirmDialog open={!!confirmDelete} busy={deleting} onCancel={() => setConfirmDelete(null)} onConfirm={doDelete}
+        title={confirmDelete?.leadId ? 'Delete this lead?' : 'Delete this conversation?'}
+        body={confirmDelete?.leadId
+          ? <>This permanently removes <b className="text-ink">{leadById[confirmDelete.leadId]?.company_name || 'the lead'}</b> together with every email, reply and task linked to it. This cannot be undone.</>
+          : <>This removes every message with <b className="text-ink">{confirmDelete?.threadKey ? threadByKey[confirmDelete.threadKey]?.counterpart : ''}</b> from Klientic. Emails already delivered stay in their inbox.</>} />
       <LeadDrawer lead={drawerLead} onClose={() => setDrawerLead(null)} onChange={refresh} />
       <ComposeModal open={!!composeLead} lead={composeLead} onClose={() => setComposeLead(null)} onSent={refresh} />
       {logOpen && <LogReplyModal projectId={project.id} leads={leads} onClose={() => setLogOpen(false)} onDone={() => { setStage('waiting'); refresh(); }} />}

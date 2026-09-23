@@ -17,6 +17,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   onMove: (leadId: string | null, stage: 'meeting' | 'followup1' | 'closed') => void;
   onOpenLead: (lead: Lead) => void;
   onDelete?: (leadId: string) => void;
+  onDeleteThread?: (threadKey: string) => void;
 }) {
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,7 +63,9 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
               <button onClick={() => onMove(thread.leadId, 'meeting')} disabled={!thread.leadId} title="Mark as booked meeting" className="btn btn-ghost btn-sm"><CalendarCheck size={14} /> Booked</button>
               <button onClick={() => onMove(thread.leadId, 'followup1')} disabled={!thread.leadId} title="Mark as follow-up" className="btn btn-ghost btn-sm"><Repeat size={14} /> Follow-up</button>
               <button onClick={() => onMove(thread.leadId, 'closed')} disabled={!thread.leadId} title="Mark as sold" className="btn btn-ghost btn-sm"><Trophy size={14} /> Sold</button>
-              {onDelete && thread.leadId && <button onClick={() => onDelete(thread.leadId!)} title="Delete this lead" className="btn btn-ghost btn-sm !px-2 text-bad"><Trash2 size={14} /></button>}
+              {thread.leadId
+                ? (onDelete && <button onClick={() => onDelete(thread.leadId!)} title="Delete this lead" className="btn btn-ghost btn-sm !px-2 text-bad"><Trash2 size={14} /></button>)
+                : (onDeleteThread && <button onClick={() => onDeleteThread(thread.key)} title="Delete this conversation" className="btn btn-ghost btn-sm !px-2 text-bad"><Trash2 size={14} /></button>)}
             </div>
           </div>
         </div>
