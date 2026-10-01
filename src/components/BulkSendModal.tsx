@@ -1,37 +1,62 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Upload, Users, Search, CheckCircle2, XCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { Send, Loader2, Upload, Users, Search, CheckCircle2, XCircle, ArrowLeft, ArrowRight, History, MailCheck } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal, StageTag } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, isHtmlEmpty, type RichEditorHandle } from '@/components/RichEditor';
 import { SubjectInput, rememberSubject } from '@/components/SubjectInput';
+import { SentHistoryDialog, type HistoryTarget } from '@/components/SentHistoryDialog';
 import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import { sendersFrom } from '@/lib/email/resend';
+import { EMPTY_HISTORY, historyFor, loadSentHistory, repairContactedLeads, type SentHistory } from '@/lib/sentHistory';
+import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
 type Recipient = { email: string; name?: string | null; company?: string | null; role?: string | null; website?: string | null; leadId?: string | null };
 type Step = 'recipients' | 'message' | 'sending';
 type Source = 'csv' | 'leads';
 type SendResult = { email: string; ok: boolean; error?: string };
+/** The "already emailed" dialog: who it is about and what to do once the user confirms. */
+type Prompt = { targets: HistoryTarget[]; onConfirm: () => void; view?: boolean };
 
 const PLACEHOLDERS = ['{{first_name}}', '{{name}}', '{{company}}', '{{email}}', '{{role}}'];
 const CHUNK = 20;
+const PAGE = 1000;
 
 const LEAD_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'new', label: 'New' },
+  { key: 'contacted', label: 'Contacted' },
   { key: 'import', label: 'Imported' },
   { key: 'active', label: 'In sequence' },
   { key: 'positive', label: 'Positive' },
 ];
 
+const lower = (s?: string | null) => (s || '').trim().toLowerCase();
+
+/** Every lead with an email in the project (paged past Supabase's 1000-row cap). */
+async function fetchLeads(supabase: SupabaseClient, projectId: string): Promise<Lead[]> {
+  const out: Lead[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase.from('leads').select('*').eq('project_id', projectId).not('email', 'is', null)
+      .order('created_at', { ascending: false }).range(from, from + PAGE - 1);
+    const rows = (data as Lead[] | null) || [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 /**
  * Manual bulk sender: pick recipients from a CSV or from existing leads,
  * write one message with {{placeholders}}, attach files, send in chunks.
+ * Anyone who was already emailed from this project triggers a warning with
+ * the history of what went out before they can be picked again.
  */
 export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone?: () => void }) {
   const { project, supabase, settings } = useApp();
@@ -50,9 +75,14 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
 
   // leads source
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [history, setHistory] = useState<SentHistory>(EMPTY_HISTORY);
+  const [loadingLeads, setLoadingLeads] = useState(false);
   const [leadFilter, setLeadFilter] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** addresses the user explicitly confirmed to email again (this session of the modal) */
+  const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  const [prompt, setPrompt] = useState<Prompt | null>(null);
 
   // message
   const [subject, setSubject] = useState('');
@@ -66,6 +96,19 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const [results, setResults] = useState<SendResult[]>([]);
   const [busy, setBusy] = useState(false);
 
+  const loadLeads = useCallback(async () => {
+    if (!project) return;
+    setLoadingLeads(true);
+    try {
+      const [list, hist] = await Promise.all([fetchLeads(supabase, project.id), loadSentHistory(supabase, project.id)]);
+      // Leads that were emailed earlier but never left "New" are moved to
+      // Contacted so the New list only holds people nobody has written to.
+      const repaired = await repairContactedLeads(supabase, list, hist);
+      setLeads(repaired.size ? list.map((l) => repaired.get(l.id) || l) : list);
+      setHistory(hist);
+    } finally { setLoadingLeads(false); }
+  }, [project, supabase]);
+
   useEffect(() => {
     if (!open) return;
     setStep('recipients'); setSource('csv'); setRows(null); setCsvName(null); setAlsoImport(true);
@@ -73,11 +116,27 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     setStartFollowups(true); setProgress({ done: 0, total: 0 }); setResults([]); setBusy(false);
     setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || sendersFrom(settings)[0]?.id || '');
     setCc(''); setBcc(''); setShowCc(false);
-    if (project) {
-      supabase.from('leads').select('*').eq('project_id', project.id).not('email', 'is', null).order('created_at', { ascending: false })
-        .then(({ data }) => setLeads((data as Lead[]) || []));
-    }
-  }, [open, project, supabase, settings]);
+    setConfirmed(new Set()); setPrompt(null);
+    loadLeads();
+  }, [open, settings, loadLeads]);
+
+  // ---- who was already emailed
+  const histOf = useCallback((who: { id?: string | null; email?: string | null }) => historyFor(history, who), [history]);
+  const isContacted = useCallback((l: Lead) => !!l.last_contacted_at || histOf(l).length > 0, [histOf]);
+  const matches = useCallback((l: Lead, key: string) => {
+    if (key === 'new') return l.stage === 'new' && !isContacted(l);
+    if (key === 'contacted') return isContacted(l);
+    if (key === 'import') return l.source === 'import';
+    if (key === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
+    if (key === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
+    return true;
+  }, [isContacted]);
+  const targetOf = useCallback((l: Lead): HistoryTarget => ({
+    email: lower(l.email), label: `${l.company_name}${l.contact_name ? ` · ${l.contact_name}` : ''}`,
+    leadId: l.id, lastContactedAt: l.last_contacted_at, rows: histOf(l),
+  }), [histOf]);
+  const markConfirmed = (emails: string[]) => setConfirmed((c) => { const n = new Set(c); emails.forEach((e) => n.add(e)); return n; });
+  const selectIds = (ids: string[], on: boolean) => setSelected((s) => { const n = new Set(s); ids.forEach((id) => (on ? n.add(id) : n.delete(id))); return n; });
 
   // ---- recipients from CSV
   const csvRecipients = useMemo<Recipient[]>(() => {
@@ -104,25 +163,44 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     }
     return out;
   }, [rows]);
+  const csvAlreadyEmailed = useMemo(() => csvRecipients.filter((r) => histOf({ email: r.email }).length > 0).length, [csvRecipients, histOf]);
 
   // ---- recipients from leads
-  const filteredLeads = leads.filter((l) => {
+  const filteredLeads = useMemo(() => leads.filter((l) => {
     if (q && !`${l.company_name} ${l.contact_name} ${l.email}`.toLowerCase().includes(q.toLowerCase())) return false;
-    if (leadFilter === 'new') return l.stage === 'new';
-    if (leadFilter === 'import') return l.source === 'import';
-    if (leadFilter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
-    if (leadFilter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
-    return true;
-  });
+    return matches(l, leadFilter);
+  }), [leads, q, leadFilter, matches]);
+  const tabCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const f of LEAD_FILTERS) c[f.key] = leads.filter((l) => matches(l, f.key)).length;
+    return c;
+  }, [leads, matches]);
   const leadRecipients = useMemo<Recipient[]>(() =>
     leads.filter((l) => selected.has(l.id) && l.email).map((l) => ({
-      email: l.email!.toLowerCase(), name: l.contact_name, company: l.company_name, role: l.role, website: l.website, leadId: l.id,
+      email: lower(l.email), name: l.contact_name, company: l.company_name, role: l.role, website: l.website, leadId: l.id,
     })), [leads, selected]);
 
   const recipients = source === 'csv' ? csvRecipients : leadRecipients;
   const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selected.has(l.id));
+
+  function toggleLead(l: Lead) {
+    if (selected.has(l.id)) { selectIds([l.id], false); return; }
+    const email = lower(l.email);
+    if (isContacted(l) && !confirmed.has(email)) {
+      setPrompt({ targets: [targetOf(l)], onConfirm: () => { markConfirmed([email]); selectIds([l.id], true); } });
+      return;
+    }
+    selectIds([l.id], true);
+  }
   function toggleAll() {
-    setSelected((s) => { const n = new Set(s); if (allFilteredSelected) filteredLeads.forEach((l) => n.delete(l.id)); else filteredLeads.forEach((l) => n.add(l.id)); return n; });
+    const ids = filteredLeads.map((l) => l.id);
+    if (allFilteredSelected) { selectIds(ids, false); return; }
+    const dups = filteredLeads.filter((l) => isContacted(l) && !confirmed.has(lower(l.email)));
+    if (!dups.length) { selectIds(ids, true); return; }
+    setPrompt({ targets: dups.map(targetOf), onConfirm: () => { markConfirmed(dups.map((l) => lower(l.email))); selectIds(ids, true); } });
+  }
+  function showHistory(l: Lead) {
+    setPrompt({ view: true, targets: [targetOf(l)], onConfirm: () => { markConfirmed([lower(l.email)]); selectIds([l.id], true); } });
   }
 
   function insertPlaceholder(p: string) {
@@ -133,11 +211,34 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const previewVars = recipients[0] ? recipientVars(recipients[0]) : { first_name: 'Anna', name: 'Anna Svensson', company: 'Acme AB', email: 'anna@acme.se', role: '', website: '', domain: 'acme.se' };
 
   // ---- send
-  async function send() {
+  function send() {
     if (!project) return;
     if (!recipients.length) return toast.error('No recipients');
     if (!subject.trim()) return toast.error('Add a subject');
     if (isHtmlEmpty(body)) return toast.error('Write a message');
+    // last guard before anything goes out: anyone already emailed (CSV rows included)
+    const leadsById = new Map(leads.map((l) => [l.id, l]));
+    const dups = recipients.filter((r) => {
+      if (confirmed.has(r.email)) return false;
+      const lead = r.leadId ? leadsById.get(r.leadId) : undefined;
+      return !!lead?.last_contacted_at || histOf({ id: r.leadId, email: r.email }).length > 0;
+    });
+    if (dups.length) {
+      setPrompt({
+        targets: dups.map((r) => ({
+          email: r.email, label: r.name || r.company || r.email, leadId: r.leadId,
+          lastContactedAt: (r.leadId && leadsById.get(r.leadId)?.last_contacted_at) || null,
+          rows: histOf({ id: r.leadId, email: r.email }),
+        })),
+        onConfirm: () => { markConfirmed(dups.map((r) => r.email)); void doSend(); },
+      });
+      return;
+    }
+    void doSend();
+  }
+
+  async function doSend() {
+    if (!project) return;
     setBusy(true); setStep('sending');
     let list = recipients;
     try {
@@ -187,6 +288,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const failed = results.filter((r) => !r.ok);
 
   return (
+    <>
     <Modal open={open} onClose={busy ? () => {} : onClose} title="Send to a list" wide>
       {/* stepper */}
       <div className="mb-4 flex items-center gap-2 text-[12px] font-bold">
@@ -216,12 +318,18 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
               {rows && (
                 <>
                   <div className="text-[12.5px] text-dim"><b className="text-ink">{csvRecipients.length}</b> unique valid email{csvRecipients.length === 1 ? '' : 's'} found{csvRecipients.length === 0 && ' — make sure the list has an email column'}</div>
+                  {csvAlreadyEmailed > 0 && (
+                    <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: 'var(--amber)' }}>
+                      <MailCheck size={13} /> {csvAlreadyEmailed} of these {csvAlreadyEmailed === 1 ? 'was' : 'were'} already emailed from this project — you&rsquo;ll be asked to confirm before sending.
+                    </div>
+                  )}
                   {csvRecipients.length > 0 && (
                     <div className="max-h-44 overflow-y-auto rounded-xl border border-line text-[12.5px]">
                       {csvRecipients.slice(0, 50).map((r) => (
                         <div key={r.email} className="flex items-center gap-3 border-t border-line px-3 py-2 first:border-t-0">
                           <span className="min-w-0 flex-1 truncate font-semibold text-ink">{r.name || r.company || r.email.split('@')[0]}</span>
                           <span className="truncate text-dim">{r.company && r.name ? `${r.company} · ` : ''}{r.email}</span>
+                          {histOf({ email: r.email }).length > 0 && <span className="flex-none text-[10.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--amber)' }}>Emailed</span>}
                         </div>
                       ))}
                       {csvRecipients.length > 50 && <div className="px-3 py-2 text-faint">…and {csvRecipients.length - 50} more</div>}
@@ -237,9 +345,11 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
+                <div className="inline-flex flex-wrap rounded-[11px] border border-line bg-surface-2 p-[3px]">
                   {LEAD_FILTERS.map((f) => (
-                    <button key={f.key} onClick={() => setLeadFilter(f.key)} className={`rounded-lg px-2.5 py-1 text-[12px] font-bold transition ${leadFilter === f.key ? 'bg-ink text-bg' : 'text-dim'}`}>{f.label}</button>
+                    <button key={f.key} onClick={() => setLeadFilter(f.key)} className={`rounded-lg px-2.5 py-1 text-[12px] font-bold transition ${leadFilter === f.key ? 'bg-ink text-bg' : 'text-dim'}`}>
+                      {f.label} <span className={leadFilter === f.key ? 'opacity-70' : 'text-faint'}>{tabCounts[f.key] ?? 0}</span>
+                    </button>
                   ))}
                 </div>
                 <div className="ml-auto flex items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-1.5">
@@ -250,18 +360,41 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
               <div className="max-h-64 overflow-y-auto rounded-xl border border-line text-[12.5px]">
                 <label className="flex items-center gap-3 border-b border-line bg-surface-2 px-3 py-2 font-bold text-ink">
                   <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} /> Select all {filteredLeads.length} shown
+                  {loadingLeads && <span className="ml-auto flex items-center gap-1.5 text-[11.5px] font-semibold text-dim"><Loader2 size={13} className="animate-spin text-accent" /> Refreshing…</span>}
                 </label>
-                {filteredLeads.length === 0 && <div className="px-3 py-6 text-center text-faint">No leads with an email match this filter.</div>}
-                {filteredLeads.map((l) => (
-                  <label key={l.id} className="flex cursor-pointer items-center gap-3 border-t border-line px-3 py-2 first:border-t-0 hover:bg-surface-2">
-                    <input type="checkbox" checked={selected.has(l.id)} onChange={() => setSelected((s) => { const n = new Set(s); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n; })} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold text-ink">{l.company_name}{l.contact_name ? ` · ${l.contact_name}` : ''}</span>
-                      <span className="block truncate text-[11.5px] text-faint">{l.email}</span>
-                    </span>
-                    <StageTag stage={l.stage} />
-                  </label>
-                ))}
+                {filteredLeads.length === 0 && (
+                  <div className="px-3 py-6 text-center text-faint">
+                    {leadFilter === 'contacted' ? 'Nobody has been emailed from this project yet.' : 'No leads with an email match this filter.'}
+                  </div>
+                )}
+                {filteredLeads.map((l) => {
+                  const sent = histOf(l);
+                  const contacted = isContacted(l);
+                  const last = sent[0];
+                  return (
+                    <div key={l.id} className={`flex items-center gap-3 border-t border-line px-3 py-2 first:border-t-0 hover:bg-surface-2 ${selected.has(l.id) ? 'bg-[var(--accent-soft)]' : ''}`}>
+                      <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleLead(l)} aria-label={`Select ${l.company_name}`} />
+                      <button type="button" onClick={() => toggleLead(l)} className="min-w-0 flex-1 text-left">
+                        <span className="block truncate font-semibold text-ink">{l.company_name}{l.contact_name ? ` · ${l.contact_name}` : ''}</span>
+                        <span className="block truncate text-[11.5px] text-faint">{l.email}</span>
+                        {contacted && (
+                          <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold" style={{ color: 'var(--amber)' }}>
+                            <MailCheck size={11} className="flex-none" />
+                            <span className="truncate">
+                              {sent.length ? `${sent.length} email${sent.length === 1 ? '' : 's'} sent` : 'Contacted'} · last {relTime(last?.sent_at || last?.created_at || l.last_contacted_at)}{last?.subject ? ` · ${last.subject}` : ''}
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                      {contacted && (
+                        <button type="button" onClick={() => showHistory(l)} className="btn btn-ghost btn-sm flex-none !px-2" title="See what was sent before">
+                          <History size={13} /> History
+                        </button>
+                      )}
+                      <StageTag stage={l.stage} />
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
@@ -313,10 +446,13 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
             </div>
           )}
 
-          <label className="flex items-center gap-2 text-[12.5px] text-dim">
-            <input type="checkbox" checked={startFollowups} onChange={(e) => setStartFollowups(e.target.checked)} />
-            Let the agent run automated follow-ups for leads that are still <b className="text-ink">New</b>
-          </label>
+          <div>
+            <label className="flex items-center gap-2 text-[12.5px] text-dim">
+              <input type="checkbox" checked={startFollowups} onChange={(e) => setStartFollowups(e.target.checked)} />
+              Let the agent run automated follow-ups for leads that are still <b className="text-ink">New</b>
+            </label>
+            <p className="hint">Every lead you send to moves from New to Contacted either way — this only decides whether the agent follows up later.</p>
+          </div>
 
           <div className="flex justify-between gap-2 pt-1">
             <button onClick={() => setStep('recipients')} className="btn btn-ghost"><ArrowLeft size={15} /> Recipients</button>
@@ -350,5 +486,15 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
         </div>
       )}
     </Modal>
+
+    {/* rendered outside the (transformed) modal so it stacks on top of it */}
+    <SentHistoryDialog
+      open={!!prompt}
+      view={prompt?.view}
+      targets={prompt?.targets || []}
+      onCancel={() => setPrompt(null)}
+      onConfirm={() => { const p = prompt; setPrompt(null); p?.onConfirm(); }}
+    />
+    </>
   );
 }

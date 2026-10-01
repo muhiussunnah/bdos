@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.3',
+    date: '2026-10-01',
+    title: 'No accidental double emails',
+    tag: 'improvement',
+    notes: [
+      'Sending to a lead from the New tab now always moves it to Contacted — even with automated follow-ups switched off — so the New list shrinks with every send. Leads emailed earlier that were stuck in New are repaired automatically.',
+      'Send to a list has a Contacted tab: everyone you already emailed, with how many emails went out, when, and the last subject. Every tab shows its count.',
+      'Ticking someone you already emailed (or Select all over such leads) opens a warning with the full history of what was sent — click any email to read it. "Confirm to Start Send New Message" is the explicit go-ahead for a fresh offer; Cancel skips them.',
+      'The same check runs right before sending (CSV lists included) and in Compose.',
+    ],
+  },
+  {
     version: '1.1.2',
     date: '2026-09-23',
     title: 'Delete anywhere, call from follow-ups, history on every card',

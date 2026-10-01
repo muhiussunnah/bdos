@@ -93,11 +93,13 @@ export async function POST(req: Request) {
   if (lead) {
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = { last_contacted_at: now, updated_at: now };
-    if (startFollowups && lead.stage === 'new') {
+    // A successful send always takes a New lead to Contacted (so it leaves the
+    // "New" list); the follow-up sequence is only scheduled when asked for.
+    if (lead.stage === 'new') {
       const days = P.follow_up_days?.length ? P.follow_up_days : [3, 7, 21];
       patch.stage = 'contacted';
       patch.followup_step = 0;
-      patch.next_action_at = new Date(Date.now() + days[0] * 86400000).toISOString();
+      patch.next_action_at = startFollowups ? new Date(Date.now() + days[0] * 86400000).toISOString() : null;
     }
     await supabase.from('leads').update(patch).eq('id', lead.id);
   }

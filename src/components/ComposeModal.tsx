@@ -8,8 +8,10 @@ import { Modal } from '@/components/ui';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { RichEditor, plainToHtml, isHtmlEmpty } from '@/components/RichEditor';
 import { SubjectInput, rememberSubject } from '@/components/SubjectInput';
+import { SentHistoryDialog, type HistoryTarget } from '@/components/SentHistoryDialog';
 import { isEmail } from '@/lib/csv';
 import { sendersFrom } from '@/lib/email/resend';
+import { loadHistoryFor } from '@/lib/sentHistory';
 import type { Lead } from '@/lib/types';
 
 type Picked = { id: string; email: string; company_name: string; contact_name: string | null; stage: string };
@@ -41,10 +43,14 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
   const toRef = useRef<HTMLInputElement>(null);
   const senders = sendersFrom(settings);
   const [fromId, setFromId] = useState<string>('');
+  /** "already emailed" warning for the primary recipient; confirmedRef remembers the go-ahead */
+  const [dup, setDup] = useState<HistoryTarget[] | null>(null);
+  const confirmedRef = useRef<string | null>(null);
 
   // prefill from a lead when opened from the lead drawer
   useEffect(() => {
     if (!open) return;
+    confirmedRef.current = null; setDup(null);
     if (lead) {
       setPicked(lead.email ? { id: lead.id, email: lead.email, company_name: lead.company_name, contact_name: lead.contact_name, stage: lead.stage } : null);
       setTo(lead.email || '');
@@ -99,6 +105,19 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
     if (!subject.trim()) return toast.error('Add a subject');
     if (isHtmlEmpty(body)) return toast.error('Write a message');
     setBusy('send');
+    // already emailed this address from this project? show the history and ask first
+    const primaryLc = primary.toLowerCase();
+    if (confirmedRef.current !== primaryLc) {
+      const rows = await loadHistoryFor(supabase, project.id, { leadId: picked?.id, email: primaryLc }).catch(() => []);
+      if (rows.length) {
+        setBusy(null);
+        setDup([{
+          email: primaryLc, leadId: picked?.id, rows,
+          label: picked ? `${picked.company_name}${picked.contact_name ? ` · ${picked.contact_name}` : ''}` : primaryLc,
+        }]);
+        return;
+      }
+    }
     try {
       const fd = new FormData();
       fd.set('projectId', project.id);
@@ -122,6 +141,7 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
   const isNewContact = !picked && isEmail(to.split(/[,;]/)[0]?.trim() || '');
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title="New email" wide>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-faint">
@@ -223,5 +243,14 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
         </div>
       </div>
     </Modal>
+
+    {/* rendered outside the (transformed) modal so it stacks on top of it */}
+    <SentHistoryDialog
+      open={!!dup}
+      targets={dup || []}
+      onCancel={() => setDup(null)}
+      onConfirm={() => { confirmedRef.current = dup?.[0]?.email || null; setDup(null); void send(); }}
+    />
+    </>
   );
 }
