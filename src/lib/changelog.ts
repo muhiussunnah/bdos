@@ -27,6 +27,16 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.9',
+    date: '2026-10-05',
+    title: 'Light-mode sidebar',
+    tag: 'improvement',
+    notes: [
+      'In light mode the sidebar is now white with a soft lavender fade, a hairline edge and dark text, so it belongs with the rest of the light interface. The active item gets a purple pill and the gradient marker.',
+      'Dark mode keeps the deep plum sidebar exactly as before. Switching themes recolours the sidebar instantly.',
+    ],
+  },
+  {
     version: '1.1.8',
     date: '2026-10-05',
     title: 'A pipeline that feels alive',
