@@ -7,6 +7,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
 import { ComposeModal } from '@/components/ComposeModal';
 import { STAGES } from '@/lib/utils';
+import { stageLabel } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
 
 type Prep = { summary: string; what_they_do: string; why_relevant: string; talking_points: string[]; objections: string[]; next_steps: string[] };
@@ -69,7 +70,7 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
 
   async function moveStage(stage: string) {
     await supabase.from('leads').update({ stage, updated_at: new Date().toISOString() }).eq('id', lead!.id);
-    toast.success(`Moved to ${stage}`);
+    toast.success(`Moved to ${stageLabel(stage)}`);
     onChange();
   }
 

@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, X } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
@@ -11,6 +11,7 @@ import { ImportLeadsModal } from '@/components/ImportLeadsModal';
 import { TagInput } from '@/components/TagInput';
 import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, ConfirmDialog, useSort, sortBy, SortTh } from '@/components/listing';
 import { STAGES } from '@/lib/utils';
+import { PIPELINE_BY_KEY, isPipelineKey, type PipelineKey } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
 
 const FILTERS = [
@@ -18,7 +19,7 @@ const FILTERS = [
   { key: 'A', label: 'Priority A' },
   { key: 'new', label: 'New' },
   { key: 'active', label: 'Active' },
-  { key: 'positive', label: 'Won / Positive' },
+  { key: 'positive', label: 'Won / Active deal' },
   { key: 'import', label: 'Imported' },
 ];
 
@@ -28,9 +29,12 @@ const STAGE_ORDER = ['new', 'contacted', 'followup1', 'followup2', 'followup3', 
 function LeadsInner() {
   const { project, supabase, refreshCounts } = useApp();
   const params = useSearchParams();
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  /** pipeline step from the dashboard cards (?stage=meeting etc.) */
+  const [stageKey, setStageKey] = useState<PipelineKey | null>(null);
   const [q, setQ] = useState('');
   const [active, setActive] = useState<Lead | null>(null);
   const [discoverOpen, setDiscoverOpen] = useState(false);
@@ -50,12 +54,24 @@ function LeadsInner() {
   }, [project, supabase]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (params.get('discover')) setDiscoverOpen(true); if (params.get('import')) setImportOpen(true); }, [params]);
+  useEffect(() => {
+    const s = params.get('stage');
+    if (isPipelineKey(s)) { setStageKey(s); setFilter('all'); }
+    const oneShot = params.get('discover') ? 'discover' : params.get('import') ? 'import' : params.get('add') ? 'add' : null;
+    if (oneShot === 'discover') setDiscoverOpen(true);
+    if (oneShot === 'import') setImportOpen(true);
+    if (oneShot === 'add') setManualOpen(true);
+    // drop the one-shot flag so the same topbar/dashboard button works again next time
+    if (oneShot) router.replace(isPipelineKey(s) ? `/app/leads?stage=${s}` : '/app/leads');
+  }, [params, router]);
+  const clearStage = () => { setStageKey(null); router.replace('/app/leads'); };
+  const pickFilter = (key: string) => { setFilter(key); if (stageKey) clearStage(); };
   useEffect(() => { sel.clear(); }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const list = leads.filter((l) => {
       if (q && !`${l.company_name} ${l.contact_name} ${l.email} ${l.industry} ${l.location}`.toLowerCase().includes(q.toLowerCase())) return false;
+      if (stageKey && !(PIPELINE_BY_KEY[stageKey].stages as string[]).includes(l.stage)) return false;
       if (filter === 'A') return l.priority === 'A';
       if (filter === 'new') return l.stage === 'new';
       if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
@@ -71,10 +87,10 @@ function LeadsInner() {
         default: return l[sort.key];
       }
     }, sort.dir);
-  }, [leads, q, filter, sort]);
+  }, [leads, q, filter, sort, stageKey]);
 
   const pager = usePager(filtered, 'leads');
-  useEffect(() => { pager.reset(); }, [q, filter, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pager.reset(); }, [q, filter, sort, stageKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageIds = pager.slice.map((l) => l.id);
   const allIds = filtered.map((l) => l.id);
 
@@ -106,12 +122,18 @@ function LeadsInner() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
           {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${filter === f.key ? 'bg-ink text-bg' : 'text-dim'}`}>
+            <button key={f.key} onClick={() => pickFilter(f.key)}
+              className={`rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${filter === f.key && !stageKey ? 'bg-ink text-bg' : 'text-dim'}`}>
               {f.label}
             </button>
           ))}
         </div>
+        {stageKey && (
+          <button onClick={clearStage} title="Show all leads" className="inline-flex items-center gap-1.5 rounded-[11px] border border-accent bg-[var(--accent-soft)] px-3 py-1.5 text-[12.5px] font-bold text-accent">
+            <span aria-hidden>{PIPELINE_BY_KEY[stageKey].emoji}</span> {PIPELINE_BY_KEY[stageKey].n}. {PIPELINE_BY_KEY[stageKey].label}
+            <span className="text-faint">· {filtered.length}</span> <X size={13} />
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2 sm:flex">
             <Search size={14} className="text-faint" />

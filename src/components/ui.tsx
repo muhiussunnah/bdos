@@ -2,6 +2,7 @@
 
 import { X, Loader2, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { stageLabel } from '@/lib/pipeline';
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return <div className={cn('card', className)}>{children}</div>;
@@ -27,8 +28,7 @@ export function PriorityTag({ p }: { p: 'A' | 'B' | 'C' }) {
 }
 
 export function StageTag({ stage }: { stage: string }) {
-  const label = stage.replace('followup', 'Follow-up ').replace(/^\w/, (c) => c.toUpperCase());
-  return <span className={cn('stagetag', `s-${stage}`)}>{label}</span>;
+  return <span className={cn('stagetag', `s-${stage}`)}>{stageLabel(stage)}</span>;
 }
 
 export function Score({ value }: { value: number }) {

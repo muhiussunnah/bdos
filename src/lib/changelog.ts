@@ -27,6 +27,20 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.4',
+    date: '2026-10-05',
+    title: 'New dashboard & one sales pipeline everywhere',
+    tag: 'feature',
+    notes: [
+      'Dashboard redesign: a greeting banner with today\'s calls and follow-ups, "Add new lead" and "View report" buttons, and a Sales pipeline card with seven numbered stages — 1. Lead, 2. Contacted, 3. Follow-up, 4. Meeting booked, 5. Active deal, 6. Won, 7. Disqualified. Click any stage to open exactly those leads.',
+      'Topbar now has both "Find leads" (AI search) and "Add lead" (manual) — both open the Leads section directly.',
+      'Inbox uses the same seven stages first, then 8. Inbox, 9. Waiting for answer and 10. First outreach. Your last selected stage is remembered.',
+      'Every three-dot menu and the conversation drawer offer "Mark as contacted / follow-up / meeting booked / active deal / won / disqualified" — the same words as the cards. The current stage is hidden from the list.',
+      'Stage labels match everywhere: Active deal, Meeting booked, Won and Disqualified replace Positive, Meeting, Closed and Lost in tables, drawers and bulk moves.',
+      'Leads page accepts ?stage=… deep links from the dashboard and shows the active stage as a chip you can clear. New-lead cards in the inbox have a "Write email" shortcut.',
+    ],
+  },
+  {
     version: '1.1.3',
     date: '2026-10-01',
     title: 'No accidental double emails',

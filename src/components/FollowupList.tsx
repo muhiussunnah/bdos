@@ -6,6 +6,7 @@ import { Repeat, Loader2, Sparkles, Send, Phone, Mail, MoreVertical } from 'luci
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState } from '@/components/ui';
 import { relTime } from '@/lib/utils';
+import { stageLabel } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
 
 type MenuItem = { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean };
@@ -53,7 +54,7 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
               <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-bold text-ink">{l.company_name}</span>
-                  <span className="stagetag" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>{l.stage.replace('followup', 'Follow-up ')}</span>
+                  <span className="stagetag" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>{stageLabel(l.stage)}</span>
                 </div>
                 <div className="truncate text-[12px] text-dim">{l.contact_name || l.email}</div>
               </button>

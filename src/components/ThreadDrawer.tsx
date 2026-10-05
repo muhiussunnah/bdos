@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, CalendarCheck, Repeat, Trophy, ExternalLink, Trash2, Phone } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone } from 'lucide-react';
 import { Drawer } from '@/components/ui';
 import { relTime } from '@/lib/utils';
+import { PIPELINE, stepOf, stageLabel } from '@/lib/pipeline';
 import type { Thread } from '@/lib/threads';
-import type { Lead } from '@/lib/types';
+import type { Lead, Stage } from '@/lib/types';
+
+/** Stage buttons under the reply box — same names as the pipeline cards. */
+const MOVES = PIPELINE.filter((p) => p.key !== 'lead');
 
 /**
  * Gmail-style conversation view: every message exchanged with this lead,
@@ -14,7 +18,7 @@ import type { Lead } from '@/lib/types';
  */
 export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, onDelete, onDeleteThread }: {
   thread: Thread | null; onClose: () => void; onChange: () => void;
-  onMove: (leadId: string | null, stage: 'meeting' | 'followup1' | 'closed') => void;
+  onMove: (leadId: string | null, stage: Stage) => void;
   onOpenLead: (lead: Lead) => void;
   onDelete?: (leadId: string) => void;
   onDeleteThread?: (threadKey: string) => void;
@@ -29,6 +33,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   const { lead, messages } = thread;
   const subjectBase = (messages.find((m) => m.subject)?.subject || '').replace(/^(re|sv|fwd?):\s*/i, '');
   const title = lead?.company_name || thread.counterpart || 'Conversation';
+  const currentStep = lead ? stepOf(lead.stage).key : null;
 
   async function send() {
     if (!reply.trim()) return toast.error('Write a reply');
@@ -55,25 +60,34 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
     <Drawer open onClose={onClose} title={title}
       sub={`${thread.counterpart}${lead?.contact_name ? ` · ${lead.contact_name}` : ''} · ${messages.length} message${messages.length === 1 ? '' : 's'}`}
       footer={
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <textarea className="input min-h-[96px]" value={reply} onChange={(e) => setReply(e.target.value)} placeholder={thread.theirTurn ? 'Answer them…' : 'Send a follow-up…'} />
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={send} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send reply</button>
-            <div className="ml-auto flex gap-1">
-              <button onClick={() => onMove(thread.leadId, 'meeting')} disabled={!thread.leadId} title="Mark as booked meeting" className="btn btn-ghost btn-sm"><CalendarCheck size={14} /> Booked</button>
-              <button onClick={() => onMove(thread.leadId, 'followup1')} disabled={!thread.leadId} title="Mark as follow-up" className="btn btn-ghost btn-sm"><Repeat size={14} /> Follow-up</button>
-              <button onClick={() => onMove(thread.leadId, 'closed')} disabled={!thread.leadId} title="Mark as sold" className="btn btn-ghost btn-sm"><Trophy size={14} /> Sold</button>
+            <div className="ml-auto">
               {thread.leadId
-                ? (onDelete && <button onClick={() => onDelete(thread.leadId!)} title="Delete this lead" className="btn btn-ghost btn-sm !px-2 text-bad"><Trash2 size={14} /></button>)
-                : (onDeleteThread && <button onClick={() => onDeleteThread(thread.key)} title="Delete this conversation" className="btn btn-ghost btn-sm !px-2 text-bad"><Trash2 size={14} /></button>)}
+                ? (onDelete && <button onClick={() => onDelete(thread.leadId!)} title="Delete this lead" className="btn btn-ghost btn-sm text-bad"><Trash2 size={14} /> Delete lead</button>)
+                : (onDeleteThread && <button onClick={() => onDeleteThread(thread.key)} title="Delete this conversation" className="btn btn-ghost btn-sm text-bad"><Trash2 size={14} /> Delete conversation</button>)}
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-faint">Mark as</span>
+            {MOVES.map((p) => {
+              const active = currentStep === p.key;
+              return (
+                <button key={p.key} onClick={() => onMove(thread.leadId, p.target)} disabled={!thread.leadId || active} title={active ? `Already ${p.label}` : `Mark as ${p.label.toLowerCase()}`}
+                  className={`btn btn-ghost btn-sm ${active ? '!border-accent !bg-[var(--accent-soft)] !text-accent !opacity-100' : ''}`}>
+                  <span aria-hidden>{p.emoji}</span> {p.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       }>
       {lead && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[12.5px] text-dim">
           <button onClick={() => onOpenLead(lead)} className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-ink">
-            <span className="stagetag">{lead.stage.replace('followup', 'Follow-up ')}</span>
+            <span className={`stagetag s-${lead.stage}`}>{stageLabel(lead.stage)}</span>
             <span className="truncate">{lead.industry || ''}{lead.location ? ` · ${lead.location}` : ''}</span>
             <ExternalLink size={13} className="flex-none text-faint" />
           </button>

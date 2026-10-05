@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Search, CalendarCheck, Trophy, Trash2, MessagesSquare, ArrowRight } from 'lucide-react';
+import { Search, CalendarCheck, Trophy, Trash2, MessagesSquare, ArrowRight, FileText, XCircle } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Thinking } from '@/components/ui';
 import { ConfirmDialog } from '@/components/listing';
@@ -11,7 +11,8 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { FollowupList } from '@/components/FollowupList';
 import { buildThreads, type Thread } from '@/lib/threads';
-import type { Lead, Message } from '@/lib/types';
+import { stepOf } from '@/lib/pipeline';
+import type { Lead, Message, Stage } from '@/lib/types';
 
 const FOLLOWUP_STAGES = ['contacted', 'followup1', 'followup2', 'followup3'];
 
@@ -46,14 +47,14 @@ export default function FollowupsPage() {
   const threadFor = (id: string) => threadByKey[`lead:${id}`] || null;
   const refresh = () => { load(); refreshCounts(); };
 
-  async function moveLead(leadId: string | null, toStage: string) {
+  async function moveLead(leadId: string | null, toStage: Stage) {
     if (!leadId) return;
     const patch: Record<string, unknown> = { stage: toStage, updated_at: new Date().toISOString() };
     if (toStage === 'followup1') patch.next_action_at = new Date().toISOString();
-    if (toStage === 'meeting' || toStage === 'closed') patch.next_action_at = null;
+    if (['meeting', 'positive', 'closed', 'lost'].includes(toStage)) patch.next_action_at = null;
     const { error } = await supabase.from('leads').update(patch).eq('id', leadId);
     if (error) return toast.error(error.message);
-    toast.success(toStage === 'meeting' ? 'Moved to Booked meeting' : toStage === 'closed' ? 'Marked as sold' : 'Moved to Follow-up');
+    toast.success(`Moved to ${stepOf(toStage).label}`);
     setThreadKey(null); refresh();
   }
   async function doDelete() {
@@ -67,8 +68,10 @@ export default function FollowupsPage() {
   const menuFor = (id: string) => [
     ...(threadFor(id) ? [{ label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => setThreadKey(`lead:${id}`) }] : []),
     { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => setDrawerLead(leadById[id]) },
-    { label: 'Mark as booked meeting', icon: <CalendarCheck size={14} />, run: () => moveLead(id, 'meeting') },
-    { label: 'Mark as sold', icon: <Trophy size={14} />, run: () => moveLead(id, 'closed') },
+    { label: 'Mark as meeting booked', icon: <CalendarCheck size={14} />, run: () => moveLead(id, 'meeting') },
+    { label: 'Mark as active deal', icon: <FileText size={14} />, run: () => moveLead(id, 'positive') },
+    { label: 'Mark as won', icon: <Trophy size={14} />, run: () => moveLead(id, 'closed') },
+    { label: 'Mark as disqualified', icon: <XCircle size={14} />, run: () => moveLead(id, 'lost') },
     { label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete(id) },
   ];
 

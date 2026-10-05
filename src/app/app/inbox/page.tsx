@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, AlertTriangle, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
   Mail, Paperclip, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays, Trash2, Phone,
+  FileText, XCircle, PhoneCall, PenLine,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal } from '@/components/ui';
@@ -13,30 +14,46 @@ import { LeadDrawer } from '@/components/LeadDrawer';
 import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
+import { PipelineTile } from '@/components/PipelineTile';
 import { buildThreads, stamp, RANGES, rangeBounds, inRange, type Thread, type RangeKey } from '@/lib/threads';
+import { PIPELINE, isPipelineKey, stepOf, stageLabel, type PipelineKey } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
-import type { Message, Lead } from '@/lib/types';
+import type { Message, Lead, Stage } from '@/lib/types';
 
-type StageKey = 'outreach' | 'inbox' | 'waiting' | 'meeting' | 'followup' | 'sale';
+/** 1–7 are the pipeline steps (shared with the dashboard); 8–10 are conversation views. */
+type StageKey = PipelineKey | 'inbox' | 'waiting' | 'outreach';
 
-const STAGES: { key: StageKey; label: string; icon: typeof Send; hint: string }[] = [
-  { key: 'outreach', label: 'First outreach', icon: Send, hint: 'Every email you have sent' },
-  { key: 'inbox', label: 'Inbox', icon: InboxIcon, hint: 'Conversations with a reply' },
-  { key: 'waiting', label: 'Waiting for answer', icon: Clock, hint: 'They replied — your turn' },
-  { key: 'meeting', label: 'Booked meeting', icon: CalendarCheck, hint: 'Meetings on the calendar' },
-  { key: 'followup', label: 'Follow-up', icon: Repeat, hint: 'No reply yet — nudge them' },
-  { key: 'sale', label: 'To sale', icon: Trophy, hint: 'Marked as won' },
+const EXTRA: { key: Exclude<StageKey, PipelineKey>; n: number; label: string; icon: typeof Send; hint: string; color: string }[] = [
+  { key: 'inbox', n: 8, label: 'Inbox', icon: InboxIcon, hint: 'Conversations with a reply', color: '#A435E8' },
+  { key: 'waiting', n: 9, label: 'Waiting for answer', icon: Clock, hint: 'They replied — your turn', color: '#E08C1F' },
+  { key: 'outreach', n: 10, label: 'First outreach', icon: Send, hint: 'Every email you have sent', color: '#16A34A' },
 ];
 
-const FOLLOWUP_STAGES = ['contacted', 'followup1', 'followup2', 'followup3'];
+const STEP_ICON: Record<PipelineKey, React.ReactNode> = {
+  lead: <Sparkles size={14} />, contacted: <PhoneCall size={14} />, followup: <Repeat size={14} />, meeting: <CalendarCheck size={14} />,
+  deal: <FileText size={14} />, won: <Trophy size={14} />, disqualified: <XCircle size={14} />,
+};
+
+const EMPTY: Record<PipelineKey, string> = {
+  lead: 'No new leads. Use Find leads or Add lead to fill the pipeline.',
+  contacted: 'Nobody in Contacted. Leads move here automatically after the first email or call.',
+  followup: 'No follow-ups pending.',
+  meeting: 'No booked meetings yet. Answer a reply and mark it as Meeting booked.',
+  deal: 'No active deals yet. Mark a lead as Active deal once a proposal is sent.',
+  won: 'No wins yet. Mark a signed deal as Won to see it here.',
+  disqualified: 'Nothing disqualified. Mark leads that are not a fit as Disqualified to keep the pipeline clean.',
+};
+
 const LS_RANGE = 'klientic.inbox.range';
+const LS_STAGE = 'klientic.inbox.stage';
+const ALL_KEYS: StageKey[] = [...PIPELINE.map((p) => p.key), ...EXTRA.map((e) => e.key)];
 
 export default function InboxPage() {
   const { project, supabase, refreshCounts } = useApp();
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stage, setStage] = useState<StageKey>('outreach');
+  const [stage, setStage] = useState<StageKey>('inbox');
   const [range, setRange] = useState<RangeKey>('all');
   const [q, setQ] = useState('');
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
@@ -47,8 +64,14 @@ export default function InboxPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ leadId?: string; threadKey?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => { try { const r = localStorage.getItem(LS_RANGE) as RangeKey | null; if (r && RANGES.some((x) => x.key === r)) setRange(r); } catch { /* ignore */ } }, []);
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem(LS_RANGE) as RangeKey | null; if (r && RANGES.some((x) => x.key === r)) setRange(r);
+      const s = localStorage.getItem(LS_STAGE) as StageKey | null; if (s && ALL_KEYS.includes(s)) setStage(s);
+    } catch { /* ignore */ }
+  }, []);
   const pickRange = (r: RangeKey) => { setRange(r); try { localStorage.setItem(LS_RANGE, r); } catch { /* ignore */ } };
+  const pickStage = (s: StageKey) => { setStage(s); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -73,22 +96,25 @@ export default function InboxPage() {
   const outbound = useMemo(() => msgs.filter((m) => m.direction === 'outbound' && inRange(m.sent_at || m.created_at, bounds)), [msgs, bounds]);
   const inboxThreads = useMemo(() => threads.filter((t) => t.inboundCount > 0 && inRange(t.last.sent_at || t.last.created_at, bounds)), [threads, bounds]);
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
-  const leadInRange = (l: Lead) => range === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
-  const meetingLeads = useMemo(() => leads.filter((l) => l.stage === 'meeting' && leadInRange(l)), [leads, bounds]); // eslint-disable-line react-hooks/exhaustive-deps
-  const saleLeads = useMemo(() => leads.filter((l) => l.stage === 'closed' && leadInRange(l)), [leads, bounds]); // eslint-disable-line react-hooks/exhaustive-deps
-  const followupLeads = useMemo(() => leads.filter((l) => FOLLOWUP_STAGES.includes(l.stage) && leadInRange(l)), [leads, bounds]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byStep = useMemo(() => {
+    const leadInRange = (l: Lead) => range === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
+    const out = {} as Record<PipelineKey, Lead[]>;
+    for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l));
+    return out;
+  }, [leads, bounds, range]);
 
   const counts: Record<StageKey, number> = {
-    outreach: outbound.length, inbox: inboxThreads.length, waiting: waitingThreads.length,
-    meeting: meetingLeads.length, followup: followupLeads.length, sale: saleLeads.length,
+    lead: byStep.lead.length, contacted: byStep.contacted.length, followup: byStep.followup.length, meeting: byStep.meeting.length,
+    deal: byStep.deal.length, won: byStep.won.length, disqualified: byStep.disqualified.length,
+    inbox: inboxThreads.length, waiting: waitingThreads.length, outreach: outbound.length,
   };
 
-  async function moveLead(leadId: string | null | undefined, toStage: string) {
+  async function moveLead(leadId: string | null | undefined, toStage: Stage) {
     if (!leadId) return toast.error('This conversation is not linked to a lead yet.');
-    const label = toStage === 'meeting' ? 'Booked meeting' : toStage === 'closed' ? 'To sale' : 'Follow-up';
+    const label = stepOf(toStage).label;
     const patch: Record<string, unknown> = { stage: toStage, updated_at: new Date().toISOString() };
     if (toStage === 'followup1') patch.next_action_at = new Date().toISOString();
-    if (toStage === 'meeting' || toStage === 'closed') patch.next_action_at = null;
+    if (['meeting', 'positive', 'closed', 'lost'].includes(toStage)) patch.next_action_at = null;
     const { error } = await supabase.from('leads').update(patch).eq('id', leadId);
     if (error) return toast.error(error.message);
     toast.success(`Moved to ${label}`);
@@ -97,15 +123,21 @@ export default function InboxPage() {
 
   if (!project) return <Thinking label="Loading…" />;
 
-  const menuFor = (leadId: string | null | undefined, threadK?: string | null) => [
-    ...(threadK ? [{ label: 'Open conversation', icon: <MessagesSquare size={14} />, run: () => setThreadKey(threadK) }] : []),
-    { label: 'Mark as booked meeting', icon: <CalendarCheck size={14} />, run: () => moveLead(leadId, 'meeting') },
-    { label: 'Mark as follow-up', icon: <Repeat size={14} />, run: () => moveLead(leadId, 'followup1') },
-    { label: 'Mark as sold', icon: <Trophy size={14} />, run: () => moveLead(leadId, 'closed') },
-    leadId
-      ? { label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete({ leadId }) }
-      : { label: 'Delete conversation', icon: <Trash2 size={14} />, danger: true, run: () => threadK && setConfirmDelete({ threadKey: threadK }) },
-  ];
+  /** Three-dot menu: the move actions use exactly the names on the stage cards. */
+  const menuFor = (leadId: string | null | undefined, threadK?: string | null) => {
+    const lead = leadId ? leadById[leadId] : null;
+    const current = lead ? stepOf(lead.stage).key : null;
+    return [
+      ...(threadK ? [{ label: 'Open conversation', icon: <MessagesSquare size={14} />, run: () => setThreadKey(threadK) }] : []),
+      ...(lead?.email ? [{ label: 'Write email', icon: <PenLine size={14} />, run: () => setComposeLead(lead) }] : []),
+      ...PIPELINE.filter((p) => p.key !== 'lead' && p.key !== current).map((p) => ({
+        label: `Mark as ${p.label.toLowerCase()}`, icon: STEP_ICON[p.key], run: () => moveLead(leadId, p.target),
+      })),
+      leadId
+        ? { label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirmDelete({ leadId }) }
+        : { label: 'Delete conversation', icon: <Trash2 size={14} />, danger: true, run: () => threadK && setConfirmDelete({ threadKey: threadK }) },
+    ];
+  };
   const openConversationOrLead = (l: Lead) => { const t = threadForLead(l.id); if (t) setThreadKey(t.key); else setDrawerLead(l); };
 
   async function doDelete() {
@@ -126,29 +158,24 @@ export default function InboxPage() {
   }
   const openThreadFor = (m: Message) => setThreadKey(m.lead_id ? `lead:${m.lead_id}` : threads.find((t) => t.messages.some((x) => x.id === m.id))?.key || null);
   const refresh = () => { load(); refreshCounts(); };
-  const current = STAGES.find((s) => s.key === stage)!;
+  const current = isPipelineKey(stage) ? PIPELINE.find((p) => p.key === stage)! : EXTRA.find((s) => s.key === stage)!;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {STAGES.map((s) => {
-          const Ico = s.icon; const active = stage === s.key;
-          return (
-            <button key={s.key} onClick={() => { setStage(s.key); setQ(''); }}
-              className={`rounded-2xl border p-4 text-left transition ${active ? 'border-accent bg-[var(--accent-soft)]' : 'border-line bg-surface hover:border-line-2'}`}>
-              <div className="flex items-center gap-2 text-[12px] font-bold text-dim">
-                <span className="grid h-7 w-7 flex-none place-items-center rounded-lg" style={{ background: active ? 'var(--accent)' : 'var(--accent-soft)', color: active ? '#fff' : 'var(--accent)' }}><Ico size={14} /></span>
-                <span className="truncate">{s.label}</span>
-              </div>
-              <div className="mt-2 text-[26px] font-black leading-none text-ink">{counts[s.key]}</div>
-              <div className="mt-1 truncate text-[11px] text-faint">{s.hint}</div>
-            </button>
-          );
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {PIPELINE.map((p) => (
+          <PipelineTile key={p.key} n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={counts[p.key]}
+            active={stage === p.key} onClick={() => pickStage(p.key)} />
+        ))}
+        {EXTRA.map((s) => {
+          const Ico = s.icon;
+          return <PipelineTile key={s.key} n={s.n} label={s.label} hint={s.hint} icon={<Ico size={18} />} color={s.color} count={counts[s.key]}
+            active={stage === s.key} onClick={() => pickStage(s.key)} />;
         })}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-[15px] font-extrabold text-ink">{current.label}</h2>
+        <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
         <span className="text-[12px] text-faint">· {current.hint}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-[11px] border border-line bg-surface px-2.5 py-1.5">
@@ -172,9 +199,11 @@ export default function InboxPage() {
             <ThreadList threads={stage === 'inbox' ? inboxThreads : waitingThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)}
               empty={stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
           )}
-          {stage === 'meeting' && <LeadList leads={meetingLeads} q={q} empty="No booked meetings yet. Answer a reply and mark it as a booked meeting." onOpen={openConversationOrLead} onOpenLead={setDrawerLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
-          {stage === 'followup' && <FollowupList leads={followupLeads} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
-          {stage === 'sale' && <LeadList leads={saleLeads} q={q} empty="No sales yet. Mark a won conversation as sold to see it here." onOpen={openConversationOrLead} onOpenLead={setDrawerLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
+          {stage === 'followup' && <FollowupList leads={byStep.followup} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
+          {isPipelineKey(stage) && stage !== 'followup' && (
+            <LeadList key={stage} pagerKey={`inbox-${stage}`} leads={byStep[stage]} q={q} empty={EMPTY[stage]} onOpen={openConversationOrLead} onOpenLead={setDrawerLead}
+              onWrite={setComposeLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />
+          )}
         </>
       )}
 
@@ -188,7 +217,7 @@ export default function InboxPage() {
           : <>This removes every message with <b className="text-ink">{confirmDelete?.threadKey ? threadByKey[confirmDelete.threadKey]?.counterpart : ''}</b> from Klientic. Emails already delivered stay in their inbox.</>} />
       <LeadDrawer lead={drawerLead} onClose={() => setDrawerLead(null)} onChange={refresh} />
       <ComposeModal open={!!composeLead} lead={composeLead} onClose={() => setComposeLead(null)} onSent={refresh} />
-      {logOpen && <LogReplyModal projectId={project.id} leads={leads} onClose={() => setLogOpen(false)} onDone={() => { setStage('waiting'); refresh(); }} />}
+      {logOpen && <LogReplyModal projectId={project.id} leads={leads} onClose={() => setLogOpen(false)} onDone={() => { pickStage('waiting'); refresh(); }} />}
     </div>
   );
 }
@@ -208,7 +237,7 @@ function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; r
       <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} aria-label="More actions"
         className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-surface-2 hover:text-ink"><MoreVertical size={16} /></button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
+        <div className="absolute right-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
           {items.map((it) => (
             <button key={it.label} onClick={(e) => { e.stopPropagation(); setOpen(false); it.run(); }}
               className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-semibold transition hover:bg-surface-2 ${it.danger ? 'border-t border-line text-bad' : 'text-ink'}`}>{it.icon}{it.label}</button>
@@ -282,7 +311,7 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
               <div className="flex items-center gap-2">
                 <span className="truncate font-bold text-ink">{t.lead?.company_name || t.counterpart}</span>
                 {t.theirTurn && <span className="flex-none rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>Your turn</span>}
-                {t.lead && <span className="stagetag hidden sm:inline">{t.lead.stage.replace('followup', 'Follow-up ')}</span>}
+                {t.lead && <span className={`stagetag s-${t.lead.stage} hidden sm:inline`}>{stageLabel(t.lead.stage)}</span>}
               </div>
               <div className="truncate text-[12px] text-dim">{t.last.direction === 'inbound' ? '' : 'You: '}{t.last.subject ? `${t.last.subject} — ` : ''}{(t.last.body || '').replace(/\s+/g, ' ').slice(0, 120)}</div>
             </div>
@@ -297,39 +326,52 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
   );
 }
 
-/* ── Booked meeting / To sale: lead cards ─────────────────────────────────────── */
-function LeadList({ leads, q, empty, onOpen, onOpenLead, threadFor, menuFor }: {
-  leads: Lead[]; q: string; empty: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void;
+/* ── Pipeline steps (Lead, Contacted, Meeting booked, Active deal, Won, Disqualified): lead cards ── */
+function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, threadFor, menuFor }: {
+  leads: Lead[]; q: string; empty: string; pagerKey: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void; onWrite: (l: Lead) => void;
   threadFor: (leadId: string) => Thread | null; menuFor: (leadId: string) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 }) {
-  const filtered = leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email}`.toLowerCase().includes(q.toLowerCase()));
+  const filtered = useMemo(() => leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''}`.toLowerCase().includes(q.toLowerCase())), [leads, q]);
+  const pager = usePager(filtered, pagerKey, 24);
+  useEffect(() => { pager.reset(); }, [q, leads.length]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!filtered.length) return <Card><EmptyState icon={<Trophy size={38} />} title={q ? 'No matches' : 'Nothing here yet'} sub={empty} /></Card>;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {filtered.map((l) => {
-        const t = threadFor(l.id);
-        return (
-          <Card key={l.id} className="!p-4">
-            <div className="flex items-start gap-2">
-              <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left" title={t ? 'Open the full conversation' : 'Open lead'}>
-                <div className="truncate font-bold text-ink">{l.company_name}</div>
-                {l.contact_name && <div className="truncate text-[12.5px] text-dim">{l.contact_name}{l.role ? ` · ${l.role}` : ''}</div>}
-                {l.email && <div className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-faint"><Mail size={11} /> {l.email}</div>}
-                {l.phone && <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-faint"><Phone size={11} /> {l.phone}</div>}
-              </button>
-              <ThreeDot items={[
-                { label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) },
-                { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },
-                ...menuFor(l.id).filter((m) => m.label !== 'Open conversation'),
-              ]} />
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
-              {t ? <span className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-px font-semibold text-dim"><MessagesSquare size={11} /> {t.messages.length} msg · {t.inboundCount} from them</span> : <span>No messages yet</span>}
-              {l.last_contacted_at && <span className="ml-auto">Last contact {relTime(l.last_contacted_at)}</span>}
-            </div>
-          </Card>
-        );
-      })}
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {pager.slice.map((l) => {
+          const t = threadFor(l.id);
+          return (
+            <Card key={l.id} className="!p-4">
+              <div className="flex items-start gap-2">
+                <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left" title={t ? 'Open the full conversation' : 'Open lead'}>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-bold text-ink">{l.company_name}</span>
+                    <span className={`stagetag s-${l.stage} flex-none`}>{stageLabel(l.stage)}</span>
+                  </div>
+                  {l.contact_name && <div className="truncate text-[12.5px] text-dim">{l.contact_name}{l.role ? ` · ${l.role}` : ''}</div>}
+                  {l.email && <div className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-faint"><Mail size={11} /> {l.email}</div>}
+                  {l.phone && <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-faint"><Phone size={11} /> {l.phone}</div>}
+                </button>
+                <ThreeDot items={[
+                  ...(t ? [{ label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) }] : []),
+                  { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },
+                  ...menuFor(l.id).filter((m) => m.label !== 'Open conversation'),
+                ]} />
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
+                {t ? <span className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-px font-semibold text-dim"><MessagesSquare size={11} /> {t.messages.length} msg · {t.inboundCount} from them</span> : <span>No messages yet</span>}
+                {l.last_contacted_at && <span className="ml-auto">Last contact {relTime(l.last_contacted_at)}</span>}
+                {!l.last_contacted_at && l.email && <button onClick={() => onWrite(l)} className="btn btn-ghost btn-sm ml-auto !py-1"><Send size={12} /> Write email</button>}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      {pager.pages > 1 && (
+        <Card className="!p-0 [&>div]:border-t-0">
+          <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="leads" />
+        </Card>
+      )}
     </div>
   );
 }

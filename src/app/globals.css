@@ -128,6 +128,23 @@
   .s-positive, .s-meeting, .s-closed { background: var(--green-soft); color: var(--green); }
   .s-new { background: var(--blue-soft); color: var(--blue); }
   .s-contacted, .s-followup1, .s-followup2, .s-followup3 { background: var(--amber-soft); color: var(--amber); }
+  .s-lost { background: var(--red-soft); color: var(--red); }
+
+  /* pipeline tiles (dashboard + inbox) */
+  .ptile {
+    display: flex; flex-direction: column; min-width: 0; text-align: left;
+    border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px;
+    transition: .16s; color: var(--text); cursor: pointer;
+  }
+  .ptile:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); border-color: var(--border-2); }
+  .ptile.is-active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ptile .ico {
+    display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; flex: none;
+    background: var(--surface); font-size: 20px; line-height: 1; box-shadow: 0 1px 2px rgba(20, 18, 28, .08);
+  }
+  .ptile .num { font-size: 30px; font-weight: 900; letter-spacing: -.03em; line-height: 1; margin-top: 12px; }
+  .ptile .hint { font-size: 11.5px; color: var(--dim); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hand { font-family: var(--font-hand), 'Segoe Script', 'Bradley Hand', cursive; }
 
   /* form fields */
   .field { margin-bottom: 15px; }

@@ -3,13 +3,13 @@
 import { useRouter, usePathname } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Menu, Search, Sparkles, Sun, Moon, LogOut, Shield, User as UserIcon, ChevronDown } from 'lucide-react';
+import { Menu, Search, Sparkles, Sun, Moon, LogOut, Shield, User as UserIcon, ChevronDown, Plus } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { NAV } from '@/lib/constants';
 import { initials } from '@/lib/utils';
 
 const SUBTITLES: Record<string, string> = {
-  '/app/dashboard': 'Real-time overview',
+  '/app/dashboard': 'Your sales at a glance',
   '/app/autopilot': 'Autonomous research, outreach & replies',
   '/app/leads': 'Pipeline and prioritization',
   '/app/companies': 'Every contact in one place',
@@ -70,8 +70,11 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         {dark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      <Link href="/app/leads?discover=1" className="btn btn-accent">
-        <Sparkles size={15} /> <span className="hidden sm:inline">Find leads</span>
+      <Link href="/app/leads?discover=1" className="btn btn-ghost" title="Find leads with AI">
+        <Sparkles size={15} className="text-accent" /> <span className="hidden sm:inline">Find leads</span>
+      </Link>
+      <Link href="/app/leads?add=1" className="btn btn-accent" title="Add a lead by hand">
+        <Plus size={15} /> <span className="hidden sm:inline">Add lead</span>
       </Link>
 
       <div className="relative">

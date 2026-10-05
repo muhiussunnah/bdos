@@ -45,15 +45,17 @@ export function priorityFromScores(fit: number, opp: number): 'A' | 'B' | 'C' {
   return 'C';
 }
 
+/** Every database stage with the label used on the pipeline cards (see lib/pipeline.ts). */
 export const STAGES: { key: string; label: string }[] = [
   { key: 'new', label: 'New' },
   { key: 'contacted', label: 'Contacted' },
   { key: 'followup1', label: 'Follow-up 1' },
   { key: 'followup2', label: 'Follow-up 2' },
   { key: 'followup3', label: 'Follow-up 3' },
-  { key: 'positive', label: 'Positive' },
-  { key: 'meeting', label: 'Meeting' },
-  { key: 'closed', label: 'Closed' },
+  { key: 'meeting', label: 'Meeting booked' },
+  { key: 'positive', label: 'Active deal' },
+  { key: 'closed', label: 'Won' },
+  { key: 'lost', label: 'Disqualified' },
 ];
 
 export function stageClass(stage: string) {
