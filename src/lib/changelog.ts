@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.1',
+    date: '2026-10-05',
+    title: 'Follow-ups box really starts unticked',
+    tag: 'fix',
+    notes: [
+      'Send to a list re-ticked "Let the agent run automated follow-ups" every time the dialog opened. It now opens unticked, and the drip-feed choice resets between sends.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-10-05',
     title: 'Drip feed sending',

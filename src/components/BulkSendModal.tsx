@@ -116,7 +116,7 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     if (!open) return;
     setStep('recipients'); setSource('csv'); setRows(null); setCsvName(null); setAlsoImport(true);
     setSelected(new Set()); setQ(''); setLeadFilter('all'); setSubject(''); setBody(''); setFiles([]);
-    setStartFollowups(true); setProgress({ done: 0, total: 0 }); setResults([]); setBusy(false);
+    setStartFollowups(false); setDrip(null); setDripMenu(false); setProgress({ done: 0, total: 0 }); setResults([]); setBusy(false);
     setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || sendersFrom(settings)[0]?.id || '');
     setCc(''); setBcc(''); setShowCc(false);
     setConfirmed(new Set()); setPrompt(null);
