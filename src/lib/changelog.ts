@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.6',
+    date: '2026-10-05',
+    title: 'Stage names never cut off',
+    tag: 'fix',
+    notes: [
+      'Pipeline tiles on the dashboard and in the inbox wrap long names like "Meeting booked" and "Waiting for answer" onto two lines instead of truncating them. Counts stay aligned across the row.',
+    ],
+  },
+  {
     version: '1.1.5',
     date: '2026-10-05',
     title: 'Cleaner dashboard & inbox — one set of numbers',

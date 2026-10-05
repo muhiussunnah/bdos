@@ -17,7 +17,7 @@ export function PipelineTile({ n, label, hint, count, emoji, icon, color, active
     <>
       <div className="flex items-center gap-2.5">
         <span className="ico" style={icon && color ? { color } : undefined}>{emoji || icon}</span>
-        <span className="truncate text-[13px] font-extrabold text-ink"><span className="text-dim">{n}.</span> {label}</span>
+        <span className="min-w-0 text-[12.5px] font-extrabold leading-[1.15] text-ink"><span className="text-dim">{n}.</span> {label}</span>
       </div>
       <div className="num text-ink">{count}</div>
       <div className="hint" title={hint}>{hint}</div>
