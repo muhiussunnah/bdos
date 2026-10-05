@@ -52,25 +52,47 @@ export function stamp(m: Message): number {
   return new Date(m.sent_at || m.created_at).getTime();
 }
 
-/* ── date ranges ─────────────────────────────────────────────────────────────── */
-export type RangeKey = '7d' | '30d' | 'year' | 'lastyear' | 'all';
+/* ── date ranges (shared by Leads, Companies, Outreach and Inbox) ─────────────── */
+export type RangeKey = 'all' | '7d' | '30d' | 'year' | 'lastyear' | 'custom';
 export const RANGES: { key: RangeKey; label: string }[] = [
+  { key: 'all', label: 'All time' },
   { key: '7d', label: 'Last 7 days' },
   { key: '30d', label: 'Last 30 days' },
   { key: 'year', label: 'This year' },
   { key: 'lastyear', label: 'Last year' },
-  { key: 'all', label: 'Lifetime' },
+  { key: 'custom', label: 'Custom…' },
 ];
 
-export function rangeBounds(key: RangeKey, now = new Date()): { from: number; to: number } {
+/** A picked range; `from`/`to` are yyyy-mm-dd and only used when key = custom. */
+export interface DateFilter { key: RangeKey; from?: string; to?: string }
+export const ALL_TIME: DateFilter = { key: 'all' };
+
+export function isRangeKey(v: unknown): v is RangeKey {
+  return typeof v === 'string' && RANGES.some((r) => r.key === v);
+}
+
+export function rangeBounds(f: RangeKey | DateFilter, now = new Date()): { from: number; to: number } {
+  const key = typeof f === 'string' ? f : f.key;
   const y = now.getFullYear();
   switch (key) {
     case '7d': return { from: now.getTime() - 7 * 86400000, to: Infinity };
     case '30d': return { from: now.getTime() - 30 * 86400000, to: Infinity };
     case 'year': return { from: new Date(y, 0, 1).getTime(), to: Infinity };
     case 'lastyear': return { from: new Date(y - 1, 0, 1).getTime(), to: new Date(y, 0, 1).getTime() - 1 };
+    case 'custom': {
+      const c: Partial<DateFilter> = typeof f === 'string' ? {} : f;
+      const from = c.from ? new Date(`${c.from}T00:00:00`).getTime() : -Infinity;
+      const to = c.to ? new Date(`${c.to}T23:59:59.999`).getTime() : Infinity;
+      return { from: Number.isNaN(from) ? -Infinity : from, to: Number.isNaN(to) ? Infinity : to };
+    }
     default: return { from: -Infinity, to: Infinity };
   }
+}
+
+/** Short human label, also used in export file names ("last-30-days", "2026-01-01 to 2026-03-31"). */
+export function rangeLabel(f: DateFilter): string {
+  if (f.key === 'custom') return `${f.from || 'start'} to ${f.to || 'today'}`;
+  return RANGES.find((r) => r.key === f.key)?.label || 'All time';
 }
 
 export function inRange(iso: string | null | undefined, b: { from: number; to: number }): boolean {

@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.7',
+    date: '2026-10-05',
+    title: 'Phone column, date filters & filter-wise export everywhere',
+    tag: 'feature',
+    notes: [
+      'Leads table: Location now sits under Industry, and the freed column shows the Phone number directly — tap to call. Sort by phone too.',
+      'Companies: Phone and Email are full columns (tap to call / click to mail), plus Added date and pagination.',
+      'Every list has a date range: All time, Last 7 days, Last 30 days, This year, Last year, or Custom (from–to). Leads and Companies filter by the date the lead was added; Outreach by send date; Inbox by last activity. Your choice is remembered per page.',
+      'Export CSV on Leads, Companies, Outreach and every Inbox stage. The file contains exactly what you filtered (stage, search, date range) across all pages, with a count on the button. Leads export includes phone, email, stage, scores, tags, dates and notes; Inbox conversations export the last message and whose turn it is.',
+    ],
+  },
+  {
     version: '1.1.6',
     date: '2026-10-05',
     title: 'Stage names never cut off',

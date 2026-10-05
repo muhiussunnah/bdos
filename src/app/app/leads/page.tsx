@@ -3,13 +3,16 @@
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, X } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, Phone, X } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { ImportLeadsModal } from '@/components/ImportLeadsModal';
 import { TagInput } from '@/components/TagInput';
 import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, ConfirmDialog, useSort, sortBy, SortTh } from '@/components/listing';
+import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
+import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
+import { exportLeads } from '@/lib/export';
 import { STAGES } from '@/lib/utils';
 import { PIPELINE_BY_KEY, isPipelineKey, type PipelineKey } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
@@ -23,7 +26,7 @@ const FILTERS = [
   { key: 'import', label: 'Imported' },
 ];
 
-type SortKey = 'company_name' | 'industry' | 'location' | 'email' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
+type SortKey = 'company_name' | 'industry' | 'phone' | 'email' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
 const STAGE_ORDER = ['new', 'contacted', 'followup1', 'followup2', 'followup3', 'positive', 'meeting', 'closed', 'lost'];
 
 function LeadsInner() {
@@ -35,6 +38,8 @@ function LeadsInner() {
   const [filter, setFilter] = useState('all');
   /** pipeline step from the dashboard cards (?stage=meeting etc.) */
   const [stageKey, setStageKey] = useState<PipelineKey | null>(null);
+  const [range, setRange] = useDateFilter('leads');
+  const bounds = useMemo(() => rangeBounds(range), [range]);
   const [q, setQ] = useState('');
   const [active, setActive] = useState<Lead | null>(null);
   const [discoverOpen, setDiscoverOpen] = useState(false);
@@ -72,6 +77,7 @@ function LeadsInner() {
     const list = leads.filter((l) => {
       if (q && !`${l.company_name} ${l.contact_name} ${l.email} ${l.industry} ${l.location}`.toLowerCase().includes(q.toLowerCase())) return false;
       if (stageKey && !(PIPELINE_BY_KEY[stageKey].stages as string[]).includes(l.stage)) return false;
+      if (!inRange(l.created_at, bounds)) return false;
       if (filter === 'A') return l.priority === 'A';
       if (filter === 'new') return l.stage === 'new';
       if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
@@ -87,10 +93,10 @@ function LeadsInner() {
         default: return l[sort.key];
       }
     }, sort.dir);
-  }, [leads, q, filter, sort, stageKey]);
+  }, [leads, q, filter, sort, stageKey, bounds]);
 
   const pager = usePager(filtered, 'leads');
-  useEffect(() => { pager.reset(); }, [q, filter, sort, stageKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pager.reset(); }, [q, filter, sort, stageKey, range]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageIds = pager.slice.map((l) => l.id);
   const allIds = filtered.map((l) => l.id);
 
@@ -134,6 +140,8 @@ function LeadsInner() {
             <span className="text-faint">· {filtered.length}</span> <X size={13} />
           </button>
         )}
+        <DateRangeSelect value={range} onChange={setRange} />
+        <ExportButton count={filtered.length} noun="leads" onClick={() => exportLeads(filtered, stageKey ? `leads-${stageKey}` : 'leads', project.name, rangeLabel(range))} />
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2 sm:flex">
             <Search size={14} className="text-faint" />
@@ -167,7 +175,7 @@ function LeadsInner() {
                     <th className="th w-8" />
                     <SortTh label="Company" k="company_name" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Industry" k="industry" sort={sort} onToggle={toggleSort} />
-                    <SortTh label="Location" k="location" sort={sort} onToggle={toggleSort} />
+                    <SortTh label="Phone" k="phone" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Email" k="email" sort={sort} onToggle={toggleSort} />
                     <SortTh label="Fit" k="fit_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
                     <SortTh label="Opp." k="opportunity_score" sort={sort} onToggle={toggleSort} defaultDir="desc" />
@@ -191,8 +199,20 @@ function LeadsInner() {
                           {l.website && <div className="truncate text-[11.5px] text-faint" title={l.website}>{l.website.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')}</div>}
                         </div>
                       </td>
-                      <td className="td text-dim"><div className="max-w-[140px] truncate" title={l.industry || ''}>{l.industry || '—'}</div></td>
-                      <td className="td text-dim"><div className="max-w-[140px] truncate" title={l.location || ''}>{l.location || '—'}</div></td>
+                      <td className="td">
+                        <div className="max-w-[170px]">
+                          <div className="truncate text-dim" title={l.industry || ''}>{l.industry || '—'}</div>
+                          {l.location && <div className="truncate text-[11.5px] text-faint" title={l.location}>{l.location}</div>}
+                        </div>
+                      </td>
+                      <td className="td whitespace-nowrap">
+                        {l.phone ? (
+                          <a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()} title="Call — opens your phone dialer"
+                            className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">
+                            <Phone size={12} className="flex-none text-faint" /><span>{l.phone}</span>
+                          </a>
+                        ) : <span className="text-faint">—</span>}
+                      </td>
                       <td className="td min-w-[230px]">
                         {l.email ? (
                           <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()} title={l.email} className="flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">

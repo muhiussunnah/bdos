@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
-  Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays, Trash2, Phone,
+  Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2, Phone,
   FileText, XCircle, PhoneCall, PenLine,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
@@ -15,7 +15,9 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile } from '@/components/PipelineTile';
-import { buildThreads, RANGES, rangeBounds, inRange, type Thread, type RangeKey } from '@/lib/threads';
+import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
+import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
+import { exportLeads, exportThreads } from '@/lib/export';
 import { PIPELINE, isPipelineKey, stepOf, stageLabel, type PipelineKey } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead, Stage } from '@/lib/types';
@@ -43,7 +45,6 @@ const EMPTY: Record<PipelineKey, string> = {
   disqualified: 'Nothing disqualified. Mark leads that are not a fit as Disqualified to keep the pipeline clean.',
 };
 
-const LS_RANGE = 'klientic.inbox.range';
 const LS_STAGE = 'klientic.inbox.stage';
 const ALL_KEYS: StageKey[] = [...PIPELINE.map((p) => p.key), ...EXTRA.map((e) => e.key)];
 
@@ -53,7 +54,7 @@ export default function InboxPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState<StageKey>('inbox');
-  const [range, setRange] = useState<RangeKey>('all');
+  const [range, setRange] = useDateFilter('inbox');
   const [q, setQ] = useState('');
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
   const [composeLead, setComposeLead] = useState<Lead | null>(null);
@@ -64,12 +65,8 @@ export default function InboxPage() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    try {
-      const r = localStorage.getItem(LS_RANGE) as RangeKey | null; if (r && RANGES.some((x) => x.key === r)) setRange(r);
-      const s = localStorage.getItem(LS_STAGE) as StageKey | null; if (s && ALL_KEYS.includes(s)) setStage(s);
-    } catch { /* ignore */ }
+    try { const s = localStorage.getItem(LS_STAGE) as StageKey | null; if (s && ALL_KEYS.includes(s)) setStage(s); } catch { /* ignore */ }
   }, []);
-  const pickRange = (r: RangeKey) => { setRange(r); try { localStorage.setItem(LS_RANGE, r); } catch { /* ignore */ } };
   const pickStage = (s: StageKey) => { setStage(s); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
@@ -95,7 +92,7 @@ export default function InboxPage() {
   const inboxThreads = useMemo(() => threads.filter((t) => t.inboundCount > 0 && inRange(t.last.sent_at || t.last.created_at, bounds)), [threads, bounds]);
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
   const byStep = useMemo(() => {
-    const leadInRange = (l: Lead) => range === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
+    const leadInRange = (l: Lead) => range.key === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
     const out = {} as Record<PipelineKey, Lead[]>;
     for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l));
     return out;
@@ -157,6 +154,18 @@ export default function InboxPage() {
   const refresh = () => { load(); refreshCounts(); };
   const current = isPipelineKey(stage) ? PIPELINE.find((p) => p.key === stage)! : EXTRA.find((s) => s.key === stage)!;
 
+  // export = exactly what the current stage shows (date range + search), all pages
+  const qq = q.toLowerCase();
+  const matchLead = (l: Lead) => !qq || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''}`.toLowerCase().includes(qq);
+  const matchThread = (t: Thread) => !qq || `${t.lead?.company_name || ''} ${t.counterpart} ${t.last.subject} ${t.last.body}`.toLowerCase().includes(qq);
+  const exportLeadList = isPipelineKey(stage) ? byStep[stage].filter(matchLead) : [];
+  const exportThreadList = stage === 'inbox' ? inboxThreads.filter(matchThread) : stage === 'waiting' ? waitingThreads.filter(matchThread) : [];
+  const doExport = () => {
+    const what = `inbox-${stage}`;
+    if (isPipelineKey(stage)) exportLeads(exportLeadList, what, project.name, rangeLabel(range));
+    else exportThreads(exportThreadList, what, project.name, rangeLabel(range));
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
@@ -175,12 +184,8 @@ export default function InboxPage() {
         <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
         <span className="text-[12px] text-faint">· {current.hint}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-[11px] border border-line bg-surface px-2.5 py-1.5">
-            <CalendarDays size={14} className="text-faint" />
-            <select className="bg-transparent text-[12.5px] font-semibold text-ink outline-none" value={range} onChange={(e) => pickRange(e.target.value as RangeKey)} aria-label="Date range">
-              {RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-            </select>
-          </div>
+          <DateRangeSelect value={range} onChange={setRange} />
+          <ExportButton count={exportLeadList.length + exportThreadList.length} noun={isPipelineKey(stage) ? 'leads' : 'conversations'} onClick={doExport} />
           <div className="flex items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2">
             <Search size={14} className="text-faint" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="w-40 bg-transparent text-[13px] outline-none text-ink" />

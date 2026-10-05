@@ -8,6 +8,9 @@ import { Card, EmptyState, Metric, Thinking } from '@/components/ui';
 import { ComposeModal } from '@/components/ComposeModal';
 import { BulkSendModal } from '@/components/BulkSendModal';
 import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, ConfirmDialog, sortBy, type SortDir } from '@/components/listing';
+import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
+import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
+import { exportMessages } from '@/lib/export';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead } from '@/lib/types';
 
@@ -42,6 +45,8 @@ export default function OutreachPage() {
   const [confirm, setConfirm] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const sel = useSelection();
+  const [range, setRange] = useDateFilter('outreach');
+  const bounds = useMemo(() => rangeBounds(range), [range]);
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -71,6 +76,7 @@ export default function OutreachPage() {
       if (view === 'manual' && !isManual(m)) return false;
       if (view === 'auto' && isManual(m)) return false;
       if (view === 'failed' && m.status !== 'failed') return false;
+      if (!inRange(m.sent_at || m.created_at, bounds)) return false;
       if (q) {
         const lead = m.lead_id ? leads[m.lead_id] : undefined;
         const hay = `${m.subject} ${m.to_email} ${m.body} ${lead?.company_name || ''} ${lead?.contact_name || ''}`.toLowerCase();
@@ -80,10 +86,10 @@ export default function OutreachPage() {
     });
     const s = SORTS.find((x) => x.key === sortKey) || SORTS[0];
     return sortBy(list, s.pick, s.dir);
-  }, [msgs, view, q, sortKey, leads]);
+  }, [msgs, view, q, sortKey, leads, bounds]);
 
   const pager = usePager(visible, 'outreach');
-  useEffect(() => { pager.reset(); }, [view, q, sortKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pager.reset(); }, [view, q, sortKey, range]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageIds = pager.slice.map((m) => m.id);
   const allIds = visible.map((m) => m.id);
 
@@ -122,6 +128,8 @@ export default function OutreachPage() {
             </button>
           ))}
         </div>
+        <DateRangeSelect value={range} onChange={setRange} />
+        <ExportButton count={visible.length} noun="emails" onClick={() => exportMessages(visible, leads, `outreach-${view}`, project.name, rangeLabel(range))} />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="hidden items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2 sm:flex">
             <Search size={14} className="text-faint" />
