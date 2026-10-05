@@ -130,21 +130,60 @@
   .s-contacted, .s-followup1, .s-followup2, .s-followup3 { background: var(--amber-soft); color: var(--amber); }
   .s-lost { background: var(--red-soft); color: var(--red); }
 
-  /* pipeline tiles (dashboard + inbox) */
+  /* pipeline tiles (dashboard + inbox) — --tc is the stage colour */
   .ptile {
+    --tc: var(--accent);
+    position: relative; overflow: hidden; isolation: isolate;
     display: flex; flex-direction: column; min-width: 0; text-align: left;
-    border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px;
-    transition: .16s; color: var(--text); cursor: pointer;
+    background: linear-gradient(150deg, color-mix(in srgb, var(--tc) 15%, var(--surface)) 0%, color-mix(in srgb, var(--tc) 5%, var(--surface)) 100%);
+    border: 1px solid color-mix(in srgb, var(--tc) 22%, var(--border));
+    border-radius: 18px; padding: 16px 18px 18px;
+    color: var(--text); cursor: pointer;
+    transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s, border-color .25s;
   }
-  .ptile:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); border-color: var(--border-2); }
-  .ptile.is-active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ptile::after {
+    content: ''; position: absolute; z-index: -1; right: -34px; top: -34px; width: 130px; height: 130px; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--tc) 30%, transparent), transparent 70%);
+    opacity: .75; transition: transform .4s cubic-bezier(.2,.7,.3,1), opacity .3s;
+  }
+  .ptile:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--tc) 50%, var(--border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--tc) 22%, transparent); }
+  .ptile:hover::after { transform: scale(1.35); opacity: 1; }
+  .ptile.is-active {
+    border-color: var(--tc);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 22%, transparent), 0 12px 28px color-mix(in srgb, var(--tc) 20%, transparent);
+  }
   .ptile .ico {
-    display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; flex: none;
-    background: var(--surface); font-size: 20px; line-height: 1; box-shadow: 0 1px 2px rgba(20, 18, 28, .08);
+    display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; flex: none;
+    background: var(--surface); color: var(--tc); font-size: 21px; line-height: 1;
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--tc) 28%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--tc) 14%, transparent);
+    transition: transform .3s cubic-bezier(.2,.7,.3,1);
   }
-  .ptile .num { font-size: 30px; font-weight: 900; letter-spacing: -.03em; line-height: 1; margin-top: auto; padding-top: 12px; }
+  .ptile:hover .ico { transform: scale(1.1) rotate(-6deg); }
+  .ptile .n {
+    display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 6px; margin-right: 6px; border-radius: 999px;
+    background: var(--tc); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: 0; vertical-align: 2px;
+  }
+  .ptile .go { margin-left: auto; flex: none; color: var(--tc); opacity: 0; transform: translateX(-6px); transition: .22s; }
+  .ptile:hover .go, .ptile.is-active .go { opacity: 1; transform: none; }
+  .ptile .num { font-size: 34px; font-weight: 900; letter-spacing: -.04em; line-height: 1; margin-top: auto; padding-top: 14px; font-variant-numeric: tabular-nums; }
   .ptile .hint { font-size: 11.5px; color: var(--dim); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ptile .sub { margin-top: 10px; padding-top: 10px; border-top: 1px dashed color-mix(in srgb, var(--tc) 30%, var(--border)); font-size: 12px; color: var(--dim); }
+  .ptile .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--tc); transform: scaleX(0); transform-origin: left; transition: transform .4s cubic-bezier(.2,.7,.3,1); }
+  .ptile.is-active .bar { transform: scaleX(1); }
+  .ptile-lg { padding: 18px 20px 20px; }
+  .ptile-lg .num { font-size: 40px; }
+  .ptile-lg .ico { width: 48px; height: 48px; border-radius: 15px; font-size: 24px; }
+
+  .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+  .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 0 rgba(224,140,31,.55); animation: livepulse 1.6s ease-out infinite; }
+  @keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(224,140,31,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,140,31,0); } 100% { box-shadow: 0 0 0 0 rgba(224,140,31,0); } }
+  .row-turn { box-shadow: inset 3px 0 0 var(--amber); }
   .hand { font-family: var(--font-hand), 'Segoe Script', 'Bradley Hand', cursive; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ptile, .ptile::after, .ptile .ico, .ptile .go, .ptile .bar { transition: none !important; }
+    .live-dot { animation: none; }
+  }
 
   /* form fields */
   .field { margin-bottom: 15px; }

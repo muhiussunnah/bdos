@@ -23,6 +23,25 @@ export function Metric({ label, value, delta, tone, icon }: {
   );
 }
 
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg,#A435E8,#E0457E)', 'linear-gradient(135deg,#2563EB,#06B6D4)', 'linear-gradient(135deg,#16A34A,#84CC16)',
+  'linear-gradient(135deg,#E08C1F,#F43F5E)', 'linear-gradient(135deg,#7C3AED,#2563EB)', 'linear-gradient(135deg,#DB2777,#F97316)',
+];
+
+/** Initials bubble with a stable gradient per name. */
+export function Avatar({ name, size = 36, className }: { name?: string | null; size?: number; className?: string }) {
+  const s = name || '?';
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  const parts = s.replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean);
+  const ini = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+  return (
+    <span className={cn('grid flex-none place-items-center rounded-xl font-extrabold text-white', className)}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.34), background: AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length], boxShadow: '0 2px 8px rgba(20,18,28,.14)' }}>
+      {ini}
+    </span>
+  );
+}
+
 export function PriorityTag({ p }: { p: 'A' | 'B' | 'C' }) {
   return <span className={cn('tag', `t-${p}`)}>{p}</span>;
 }

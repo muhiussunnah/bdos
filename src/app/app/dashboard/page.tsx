@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, Thinking } from '@/components/ui';
-import { PipelineTile } from '@/components/PipelineTile';
+import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { PIPELINE } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
@@ -95,12 +95,13 @@ export default function DashboardPage() {
         <StageRow>
           {PIPELINE.map((p, i) => (
             <Fragment key={p.key}>
-              <PipelineTile n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={countOf(p.stages)}
+              <PipelineTile index={i} n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={countOf(p.stages)}
                 href={`/app/leads?stage=${p.key}`} className="w-[196px] flex-none snap-start xl:w-auto xl:flex-1" />
               {i < PIPELINE.length - 1 && <ArrowRight size={14} className="hidden flex-none self-center text-faint xl:block" />}
             </Fragment>
           ))}
         </StageRow>
+        <StageBar className="mt-4 px-1" segments={PIPELINE.map((p) => ({ key: p.key, label: p.label, count: countOf(p.stages), color: p.color }))} />
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">

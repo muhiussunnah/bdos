@@ -5,16 +5,16 @@ import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
   Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2, Phone,
-  FileText, XCircle, PhoneCall, PenLine,
+  FileText, XCircle, PhoneCall, PenLine, TrendingUp,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
-import { Card, EmptyState, Thinking, Modal } from '@/components/ui';
+import { Card, EmptyState, Thinking, Modal, Avatar } from '@/components/ui';
 import { usePager, Pagination, ConfirmDialog } from '@/components/listing';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
-import { PipelineTile } from '@/components/PipelineTile';
+import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
 import { exportLeads, exportThreads } from '@/lib/export';
@@ -166,21 +166,48 @@ export default function InboxPage() {
     else exportThreads(exportThreadList, what, project.name, rangeLabel(range));
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
-        {PIPELINE.map((p) => (
-          <PipelineTile key={p.key} n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={counts[p.key]}
-            active={stage === p.key} onClick={() => pickStage(p.key)} />
-        ))}
-        {EXTRA.map((s) => {
-          const Ico = s.icon;
-          return <PipelineTile key={s.key} n={s.n} label={s.label} hint={s.hint} icon={<Ico size={18} />} color={s.color} count={counts[s.key]}
-            active={stage === s.key} onClick={() => pickStage(s.key)} />;
-        })}
-      </div>
+  // little "alive" facts for the conversation tiles
+  const dayAgo = Date.now() - 86400000;
+  const repliedToday = inboxThreads.filter((t) => t.lastInbound && new Date(t.lastInbound.sent_at || t.lastInbound.created_at).getTime() >= dayAgo).length;
+  const oldestWaiting = waitingThreads.reduce((m, t) => Math.min(m, new Date(t.last.sent_at || t.last.created_at).getTime()), Infinity);
+  const inboxSub = <><b className="text-ink">{repliedToday}</b> new {repliedToday === 1 ? 'reply' : 'replies'} in the last 24h · <b className="text-ink">{waitingThreads.length}</b> your turn</>;
+  const waitingSub = waitingThreads.length
+    ? <span className="inline-flex items-center gap-1.5"><span className="live-dot" /> Longest waiting <b className="text-ink">{relTime(new Date(oldestWaiting).toISOString())}</b> — answer first</span>
+    : <>Everyone has an answer 🎉</>;
+  const contactedTotal = counts.contacted + counts.followup + counts.meeting + counts.deal + counts.won + counts.disqualified;
 
-      <div className="flex flex-wrap items-center gap-2">
+  return (
+    <div className="space-y-5">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <div className="eyebrow">Sales pipeline</div>
+            <h2 className="text-[16px] font-extrabold tracking-tight text-ink">Move leads from left to right <span className="text-faint">→</span></h2>
+          </div>
+          <span className="text-[12.5px] text-dim"><b className="text-ink">{leads.length}</b> leads · click a stage to work it</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          {PIPELINE.map((p, i) => (
+            <PipelineTile key={p.key} index={i} n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={counts[p.key]}
+              active={stage === p.key} onClick={() => pickStage(p.key)} />
+          ))}
+        </div>
+        <StageBar className="px-1" segments={PIPELINE.map((p) => ({ key: p.key, label: p.label, count: counts[p.key], color: p.color }))} />
+      </section>
+
+      <section className="space-y-3">
+        <div className="eyebrow">Conversations</div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {EXTRA.map((s, i) => {
+            const Ico = s.icon;
+            return <PipelineTile key={s.key} index={7 + i} size="lg" n={s.n} label={s.label} hint={s.hint} icon={<Ico size={22} />} color={s.color} count={counts[s.key]}
+              active={stage === s.key} onClick={() => pickStage(s.key)} sub={s.key === 'inbox' ? inboxSub : waitingSub} />;
+          })}
+          <HealthCard index={9} contacted={contactedTotal} replied={inboxThreads.length} meetings={counts.meeting + counts.won} won={counts.won} />
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
         <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
         <span className="text-[12px] text-faint">· {current.hint}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -223,6 +250,41 @@ export default function InboxPage() {
   );
 }
 
+/* ── pipeline health: reply → meeting → win conversion ───────────────────────── */
+function HealthCard({ contacted, replied, meetings, won, index }: { contacted: number; replied: number; meetings: number; won: number; index: number }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setOn(true), 80); return () => clearTimeout(t); }, []);
+  const rows = [
+    { label: 'Reply rate', value: replied, of: contacted, hint: `${replied} of ${contacted} contacted leads replied`, color: '#A435E8', icon: <ArrowDownLeft size={13} /> },
+    { label: 'Meeting rate', value: meetings, of: replied, hint: `${meetings} of ${replied} conversations became a meeting`, color: '#DB2777', icon: <CalendarCheck size={13} /> },
+    { label: 'Win rate', value: won, of: meetings, hint: `${won} of ${meetings} meetings won`, color: '#16A34A', icon: <Trophy size={13} /> },
+  ];
+  return (
+    <div className="card reveal !p-5" style={{ animationDelay: `${index * 55}ms` }}>
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}><TrendingUp size={16} /></span>
+        <div><div className="text-[12.5px] font-extrabold text-ink">Pipeline health</div><div className="text-[11px] text-faint">For the selected period</div></div>
+      </div>
+      <div className="mt-4 space-y-3.5">
+        {rows.map((r) => {
+          const pct = r.of ? Math.min(100, Math.round((r.value / r.of) * 100)) : 0;
+          return (
+            <div key={r.label} title={r.hint}>
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="inline-flex items-center gap-1.5 font-semibold text-dim"><span style={{ color: r.color }}>{r.icon}</span>{r.label}</span>
+                <span className="text-[11px] text-faint">{r.value}/{r.of} · <b className="text-[12px] text-ink">{pct}%</b></span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
+                <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: on ? `${pct}%` : '0%', background: r.color }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── three-dot menu ─────────────────────────────────────────────────────────── */
 function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[] }) {
   const [open, setOpen] = useState(false);
@@ -259,16 +321,21 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
   if (!filtered.length) return <Card><EmptyState icon={<InboxIcon size={38} />} title={q ? 'No matches' : 'Nothing here'} sub={empty} /></Card>;
   return (
     <Card className="!p-0">
-      {pager.slice.map((t) => (
-        <div key={t.key} className={`flex items-center gap-3 border-t border-line p-4 first:border-t-0 ${t.theirTurn ? 'bg-[var(--accent-soft)]/30' : ''}`}>
+      {pager.slice.map((t, i) => (
+        <div key={t.key} style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
+          className={`reveal flex items-center gap-3 border-t border-line p-4 transition first:border-t-0 hover:bg-surface-2 ${t.theirTurn ? 'row-turn' : ''}`}>
           <button onClick={() => onOpen(t)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-            <span className="grid h-8 w-8 flex-none place-items-center rounded-lg" style={{ background: t.theirTurn ? 'var(--amber-soft)' : 'var(--green-soft)', color: t.theirTurn ? 'var(--amber)' : 'var(--green)' }}>
-              {t.theirTurn ? <ArrowDownLeft size={15} /> : <Send size={15} />}
+            <span className="relative flex-none">
+              <Avatar name={t.lead?.company_name || t.counterpart} size={38} />
+              <span className="absolute -bottom-1 -right-1 grid place-items-center rounded-full border-2 border-surface text-white"
+                style={{ width: 18, height: 18, background: t.theirTurn ? 'var(--amber)' : 'var(--green)' }} title={t.theirTurn ? 'They wrote last' : 'You wrote last'}>
+                {t.theirTurn ? <ArrowDownLeft size={10} /> : <Send size={10} />}
+              </span>
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate font-bold text-ink">{t.lead?.company_name || t.counterpart}</span>
-                {t.theirTurn && <span className="flex-none rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>Your turn</span>}
+                {t.theirTurn && <span className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}><span className="live-dot" style={{ width: 5, height: 5 }} />Your turn</span>}
                 {t.lead && <span className={`stagetag s-${t.lead.stage} hidden sm:inline`}>{stageLabel(t.lead.stage)}</span>}
               </div>
               <div className="truncate text-[12px] text-dim">{t.last.direction === 'inbound' ? '' : 'You: '}{t.last.subject ? `${t.last.subject} — ` : ''}{(t.last.body || '').replace(/\s+/g, ' ').slice(0, 120)}</div>
@@ -296,11 +363,12 @@ function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, thre
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {pager.slice.map((l) => {
+        {pager.slice.map((l, i) => {
           const t = threadFor(l.id);
           return (
-            <Card key={l.id} className="!p-4">
-              <div className="flex items-start gap-2">
+            <div key={l.id} className="card reveal !p-4 transition hover:-translate-y-0.5 hover:shadow-pop" style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}>
+              <div className="flex items-start gap-3">
+                <Avatar name={l.company_name} size={40} />
                 <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left" title={t ? 'Open the full conversation' : 'Open lead'}>
                   <div className="flex items-center gap-2">
                     <span className="truncate font-bold text-ink">{l.company_name}</span>
@@ -321,7 +389,7 @@ function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, thre
                 {l.last_contacted_at && <span className="ml-auto">Last contact {relTime(l.last_contacted_at)}</span>}
                 {!l.last_contacted_at && l.email && <button onClick={() => onWrite(l)} className="btn btn-ghost btn-sm ml-auto !py-1"><Send size={12} /> Write email</button>}
               </div>
-            </Card>
+            </div>
           );
         })}
       </div>

@@ -27,6 +27,19 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.8',
+    date: '2026-10-05',
+    title: 'A pipeline that feels alive',
+    tag: 'improvement',
+    notes: [
+      'Inbox is now two clear sections: "Sales pipeline" (stages 1–7 in one row) and "Conversations" (8. Inbox, 9. Waiting for answer, plus a Pipeline health card with reply, meeting and win rates).',
+      'Stage tiles got a full redesign: gradient tint with a soft glow, numbered badge, counts that count up, hover lift, and an underline on the active stage. The same tiles power the dashboard.',
+      'A distribution bar under the stages shows how your leads split across the pipeline, on the dashboard and in the inbox.',
+      'Conversation tiles show live context: new replies in the last 24h, how many are your turn, and the longest-waiting reply with a pulsing dot.',
+      'Conversation rows and lead cards have company avatars, a who-wrote-last badge, hover states and a gentle staggered entrance. Everything respects reduced-motion settings.',
+    ],
+  },
+  {
     version: '1.1.7',
     date: '2026-10-05',
     title: 'Phone column, date filters & filter-wise export everywhere',
