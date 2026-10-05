@@ -27,6 +27,17 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.5',
+    date: '2026-10-05',
+    title: 'Cleaner dashboard & inbox — one set of numbers',
+    tag: 'improvement',
+    notes: [
+      'Inbox: the "First outreach" tile is gone — it duplicated 2. Contacted. The inbox now shows exactly 1–7 pipeline stages plus 8. Inbox and 9. Waiting for answer. Every sent email is still in each conversation (History) and in the Outreach section.',
+      'Dashboard: the five metric tiles under the pipeline (In pipeline, Contacted, Positive, Emails sent, Needs action) are removed. The Sales pipeline card is now the single source of counts, so the same numbers appear on the dashboard, in the inbox and on the leads page.',
+      'About "Positive": that tile summed Active deal + Meeting booked + Won, which is why it could show 16 while Active deal showed 0. Nothing was lost — those leads are in 4. Meeting booked and 6. Won. Active deal fills when a reply is classified positive/interested, or when you choose "Mark as active deal".',
+    ],
+  },
+  {
     version: '1.1.4',
     date: '2026-10-05',
     title: 'New dashboard & one sales pipeline everywhere',

@@ -2,9 +2,9 @@
 
 import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Users, Send, CheckCircle2, AlertTriangle, TrendingUp, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
+import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
-import { Card, Metric, PriorityTag, Thinking } from '@/components/ui';
+import { Card, PriorityTag, Thinking } from '@/components/ui';
 import { PipelineTile } from '@/components/PipelineTile';
 import { PIPELINE } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
@@ -17,21 +17,18 @@ export default function DashboardPage() {
   const { project, profile, supabase, counts } = useApp();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<TaskLite[]>([]);
-  const [sent, setSent] = useState(0);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
-    const [{ data: l }, { count }, { data: a }, { data: t }] = await Promise.all([
+    const [{ data: l }, { data: a }, { data: t }] = await Promise.all([
       supabase.from('leads').select('*').eq('project_id', project.id),
-      supabase.from('messages').select('id', { count: 'exact', head: true }).eq('project_id', project.id).eq('direction', 'outbound').eq('status', 'sent'),
       supabase.from('activity_log').select('id,kind,message,created_at').eq('project_id', project.id).order('created_at', { ascending: false }).limit(8),
       supabase.from('tasks').select('id,type,due_at').eq('project_id', project.id).eq('status', 'open'),
     ]);
     setLeads((l as Lead[]) || []);
-    setSent(count || 0);
     setActivity((a as Activity[]) || []);
     setTasks((t as TaskLite[]) || []);
     setLoading(false);
@@ -42,9 +39,6 @@ export default function DashboardPage() {
   if (!project) return <Thinking label="Loading project…" />;
   if (loading) return <Thinking label="Loading dashboard…" />;
 
-  const pipeline = leads.filter((l) => !['closed', 'lost'].includes(l.stage)).length;
-  const contacted = leads.filter((l) => l.stage !== 'new').length;
-  const positive = leads.filter((l) => ['positive', 'meeting', 'closed'].includes(l.stage)).length;
   const nowIso = new Date().toISOString();
   const dueFollowups = leads.filter((l) => l.next_action_at && l.next_action_at <= nowIso);
   const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
@@ -108,15 +102,6 @@ export default function DashboardPage() {
           ))}
         </StageRow>
       </Card>
-
-      {/* metrics */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
-        <Metric label="In pipeline" value={pipeline} icon={<Users size={13} />} delta={`${leads.filter((l) => l.created_at >= new Date(Date.now() - 864e5).toISOString()).length} new today`} />
-        <Metric label="Contacted" value={contacted} icon={<Send size={13} />} />
-        <Metric label="Positive" value={positive} icon={<CheckCircle2 size={13} />} tone="up" delta={positive > 0 ? 'ready to close' : undefined} />
-        <Metric label="Emails sent" value={sent} icon={<TrendingUp size={13} />} />
-        <Metric label="Needs action" value={dueFollowups.length + counts.inbox} icon={<AlertTriangle size={13} />} tone={dueFollowups.length ? 'down' : undefined} />
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* AI recommendations */}

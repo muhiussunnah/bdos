@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import {
-  Send, Sparkles, Loader2, AlertTriangle, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
-  Mail, Paperclip, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays, Trash2, Phone,
+  Send, Sparkles, Loader2, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
+  Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, CalendarDays, Trash2, Phone,
   FileText, XCircle, PhoneCall, PenLine,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
@@ -15,18 +15,17 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile } from '@/components/PipelineTile';
-import { buildThreads, stamp, RANGES, rangeBounds, inRange, type Thread, type RangeKey } from '@/lib/threads';
+import { buildThreads, RANGES, rangeBounds, inRange, type Thread, type RangeKey } from '@/lib/threads';
 import { PIPELINE, isPipelineKey, stepOf, stageLabel, type PipelineKey } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead, Stage } from '@/lib/types';
 
-/** 1–7 are the pipeline steps (shared with the dashboard); 8–10 are conversation views. */
-type StageKey = PipelineKey | 'inbox' | 'waiting' | 'outreach';
+/** 1–7 are the pipeline steps (shared with the dashboard); 8–9 are conversation views. */
+type StageKey = PipelineKey | 'inbox' | 'waiting';
 
 const EXTRA: { key: Exclude<StageKey, PipelineKey>; n: number; label: string; icon: typeof Send; hint: string; color: string }[] = [
   { key: 'inbox', n: 8, label: 'Inbox', icon: InboxIcon, hint: 'Conversations with a reply', color: '#A435E8' },
   { key: 'waiting', n: 9, label: 'Waiting for answer', icon: Clock, hint: 'They replied — your turn', color: '#E08C1F' },
-  { key: 'outreach', n: 10, label: 'First outreach', icon: Send, hint: 'Every email you have sent', color: '#16A34A' },
 ];
 
 const STEP_ICON: Record<PipelineKey, React.ReactNode> = {
@@ -93,7 +92,6 @@ export default function InboxPage() {
   const bounds = useMemo(() => rangeBounds(range), [range]);
 
   // ── buckets (all respect the date range) ──
-  const outbound = useMemo(() => msgs.filter((m) => m.direction === 'outbound' && inRange(m.sent_at || m.created_at, bounds)), [msgs, bounds]);
   const inboxThreads = useMemo(() => threads.filter((t) => t.inboundCount > 0 && inRange(t.last.sent_at || t.last.created_at, bounds)), [threads, bounds]);
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
   const byStep = useMemo(() => {
@@ -106,7 +104,7 @@ export default function InboxPage() {
   const counts: Record<StageKey, number> = {
     lead: byStep.lead.length, contacted: byStep.contacted.length, followup: byStep.followup.length, meeting: byStep.meeting.length,
     deal: byStep.deal.length, won: byStep.won.length, disqualified: byStep.disqualified.length,
-    inbox: inboxThreads.length, waiting: waitingThreads.length, outreach: outbound.length,
+    inbox: inboxThreads.length, waiting: waitingThreads.length,
   };
 
   async function moveLead(leadId: string | null | undefined, toStage: Stage) {
@@ -156,13 +154,12 @@ export default function InboxPage() {
     setConfirmDelete(null); setThreadKey(null); setDrawerLead(null);
     load(); refreshCounts();
   }
-  const openThreadFor = (m: Message) => setThreadKey(m.lead_id ? `lead:${m.lead_id}` : threads.find((t) => t.messages.some((x) => x.id === m.id))?.key || null);
   const refresh = () => { load(); refreshCounts(); };
   const current = isPipelineKey(stage) ? PIPELINE.find((p) => p.key === stage)! : EXTRA.find((s) => s.key === stage)!;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
         {PIPELINE.map((p) => (
           <PipelineTile key={p.key} n={p.n} label={p.label} hint={p.hint} emoji={p.emoji} color={p.color} count={counts[p.key]}
             active={stage === p.key} onClick={() => pickStage(p.key)} />
@@ -194,7 +191,6 @@ export default function InboxPage() {
 
       {loading ? <Thinking label="Loading pipeline…" /> : (
         <>
-          {stage === 'outreach' && <OutreachList items={outbound} leadById={leadById} q={q} menuFor={menuFor} onOpen={openThreadFor} threadKeyOf={(m) => (m.lead_id ? `lead:${m.lead_id}` : null)} />}
           {(stage === 'inbox' || stage === 'waiting') && (
             <ThreadList threads={stage === 'inbox' ? inboxThreads : waitingThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)}
               empty={stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
@@ -249,49 +245,6 @@ function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; r
 }
 
 type MenuFor = (leadId: string | null | undefined, threadKey?: string | null) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
-
-/* ── First outreach: sent emails ─────────────────────────────────────────────── */
-function OutreachList({ items, leadById, q, menuFor, onOpen, threadKeyOf }: {
-  items: Message[]; leadById: Record<string, Lead>; q: string; menuFor: MenuFor; onOpen: (m: Message) => void; threadKeyOf: (m: Message) => string | null;
-}) {
-  const filtered = useMemo(() => items.filter((m) => {
-    if (!q) return true;
-    const lead = m.lead_id ? leadById[m.lead_id] : null;
-    return `${m.subject} ${m.to_email} ${m.body} ${lead?.company_name || ''}`.toLowerCase().includes(q.toLowerCase());
-  }).sort((a, b) => stamp(b) - stamp(a)), [items, q, leadById]);
-  const pager = usePager(filtered, 'inbox-outreach', 25);
-  useEffect(() => { pager.reset(); }, [q, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!filtered.length) return <Card><EmptyState icon={<Send size={38} />} title={q ? 'No matches' : 'No emails in this period'} sub="Sent outreach and manual emails appear here. Try a wider date range." /></Card>;
-  return (
-    <Card className="!p-0">
-      {pager.slice.map((m) => {
-        const lead = m.lead_id ? leadById[m.lead_id] : undefined;
-        const meta = (m.ai_meta || {}) as { attachments?: string[] };
-        return (
-          <div key={m.id} className="flex items-center gap-3 border-t border-line p-4 first:border-t-0">
-            <button onClick={() => onOpen(m)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-              <span className="grid h-8 w-8 flex-none place-items-center rounded-lg" style={{ background: m.status === 'failed' ? 'var(--red-soft)' : 'var(--green-soft)', color: m.status === 'failed' ? 'var(--red)' : 'var(--green)' }}>
-                {m.status === 'failed' ? <AlertTriangle size={15} /> : <Send size={15} />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-bold text-ink">{m.subject || '(no subject)'}</span>
-                  {meta.attachments && meta.attachments.length > 0 && <Paperclip size={12} className="flex-none text-faint" />}
-                </div>
-                <div className="truncate text-[12px] text-dim">{lead?.company_name ? `${lead.company_name} · ` : ''}{m.to_email}</div>
-              </div>
-              <span className="whitespace-nowrap text-[11.5px] text-faint">{relTime(m.sent_at || m.created_at)}</span>
-              <MessagesSquare size={15} className="flex-none text-faint" />
-            </button>
-            <ThreeDot items={menuFor(m.lead_id, threadKeyOf(m))} />
-          </div>
-        );
-      })}
-      <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="emails" />
-    </Card>
-  );
-}
 
 /* ── Inbox / Waiting: conversations ──────────────────────────────────────────── */
 function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[]; q: string; empty: string; menuFor: MenuFor; onOpen: (t: Thread) => void }) {
