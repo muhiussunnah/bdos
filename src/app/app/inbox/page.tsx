@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
-  Send, Sparkles, Loader2, Search, MoreVertical, Clock, CalendarCheck, Repeat, Trophy,
+  Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
   Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2, Phone,
   FileText, XCircle, PhoneCall, PenLine, TrendingUp,
 } from 'lucide-react';
@@ -15,6 +15,8 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
+import { ThreeDot } from '@/components/Menu';
+import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_SENDERS } from '@/components/SenderFilter';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
 import { exportLeads, exportThreads } from '@/lib/export';
@@ -55,6 +57,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState<StageKey>('inbox');
   const [range, setRange] = useDateFilter('inbox');
+  const [sender, setSender] = useSenderFilter('inbox');
   const [q, setQ] = useState('');
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
   const [composeLead, setComposeLead] = useState<Lead | null>(null);
@@ -83,7 +86,10 @@ export default function InboxPage() {
   useEffect(() => { load(); }, [load]);
 
   const leadById = useMemo(() => { const map: Record<string, Lead> = {}; leads.forEach((l) => (map[l.id] = l)); return map; }, [leads]);
-  const threads = useMemo(() => buildThreads(msgs, leadById), [msgs, leadById]);
+  // account filter: only mail sent from / received at the chosen address
+  const scopedMsgs = useMemo(() => (sender === ALL_SENDERS ? msgs : msgs.filter((m) => messageMatchesSender(m, sender))), [msgs, sender]);
+  const seenAddrs = useMemo(() => [...new Set(msgs.map(ownAddressOf).filter(Boolean))], [msgs]);
+  const threads = useMemo(() => buildThreads(scopedMsgs, leadById), [scopedMsgs, leadById]);
   const threadByKey = useMemo(() => { const m: Record<string, Thread> = {}; threads.forEach((t) => (m[t.key] = t)); return m; }, [threads]);
   const threadForLead = (leadId: string | null | undefined) => (leadId ? threadByKey[`lead:${leadId}`] || null : null);
   const bounds = useMemo(() => rangeBounds(range), [range]);
@@ -93,10 +99,11 @@ export default function InboxPage() {
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
   const byStep = useMemo(() => {
     const leadInRange = (l: Lead) => range.key === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
+    const withSender = (l: Lead) => sender === ALL_SENDERS || !!threadByKey[`lead:${l.id}`];
     const out = {} as Record<PipelineKey, Lead[]>;
-    for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l));
+    for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l) && withSender(l));
     return out;
-  }, [leads, bounds, range]);
+  }, [leads, bounds, range, sender, threadByKey]);
 
   const counts: Record<StageKey, number> = {
     lead: byStep.lead.length, contacted: byStep.contacted.length, followup: byStep.followup.length, meeting: byStep.meeting.length,
@@ -211,6 +218,7 @@ export default function InboxPage() {
         <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
         <span className="text-[12px] text-faint">· {current.hint}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <SenderFilter value={sender} onChange={setSender} seen={seenAddrs} />
           <DateRangeSelect value={range} onChange={setRange} />
           <ExportButton count={exportLeadList.length + exportThreadList.length} noun={isPipelineKey(stage) ? 'leads' : 'conversations'} onClick={doExport} />
           <div className="flex items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2">
@@ -281,32 +289,6 @@ function HealthCard({ contacted, replied, meetings, won, index }: { contacted: n
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/* ── three-dot menu ─────────────────────────────────────────────────────────── */
-function ThreeDot({ items }: { items: { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} aria-label="More actions"
-        className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-surface-2 hover:text-ink"><MoreVertical size={16} /></button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          {items.map((it) => (
-            <button key={it.label} onClick={(e) => { e.stopPropagation(); setOpen(false); it.run(); }}
-              className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-semibold transition hover:bg-surface-2 ${it.danger ? 'border-t border-line text-bad' : 'text-ink'}`}>{it.icon}{it.label}</button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

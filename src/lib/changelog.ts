@@ -27,6 +27,17 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.1.10',
+    date: '2026-10-05',
+    title: 'Menus that stay on top & an "All emails" account filter',
+    tag: 'fix',
+    notes: [
+      'Three-dot menus no longer disappear behind neighbouring cards or rows. They float above everything, flip upwards near the bottom of the screen, and close with Escape or a click outside.',
+      'Menu items have a clear purple hover (red for Delete), readable in light and dark mode.',
+      'New account filter left of the date range in Inbox and Outreach: "All emails" by default, then every sending address on your account. Pick one to see only the mail sent from that address and the replies it received — tiles, conversations, pipeline counts, health and exports all follow it. Addresses found in older history are listed too.',
+    ],
+  },
+  {
     version: '1.1.9',
     date: '2026-10-05',
     title: 'Light-mode sidebar',

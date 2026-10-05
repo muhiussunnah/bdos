@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { Repeat, Loader2, Sparkles, Send, Phone, Mail, MoreVertical } from 'lucide-react';
+import { Repeat, Loader2, Sparkles, Send, Phone, Mail } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState } from '@/components/ui';
+import { ThreeDot, type MenuItem } from '@/components/Menu';
 import { relTime } from '@/lib/utils';
 import { stageLabel } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
-
-type MenuItem = { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean };
 
 /** Shared by the Inbox "Follow-up" stage and the dedicated /app/followups page. */
 export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll = true, menuFor }: {
@@ -69,35 +68,11 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
               </div>
               <div className="w-28 text-[12px] text-faint">{l.next_action_at ? (isDue ? <span className="font-bold" style={{ color: 'var(--amber)' }}>Due {relTime(l.next_action_at)}</span> : `Next ${new Date(l.next_action_at).toLocaleDateString()}`) : 'No date'}</div>
               <button onClick={() => onWrite(l)} className="btn btn-ghost btn-sm"><Send size={13} /> Write follow-up</button>
-              {menuFor && <RowMenu items={menuFor(l.id)} />}
+              {menuFor && <ThreeDot items={menuFor(l.id)} />}
             </div>
           );
         })}
       </Card>
-    </div>
-  );
-}
-
-function RowMenu({ items }: { items: MenuItem[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen((v) => !v)} aria-label="More actions" className="grid h-8 w-8 place-items-center rounded-lg text-faint transition hover:bg-surface-2 hover:text-ink"><MoreVertical size={16} /></button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          {items.map((it) => (
-            <button key={it.label} onClick={() => { setOpen(false); it.run(); }}
-              className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] font-semibold transition hover:bg-surface-2 ${it.danger ? 'border-t border-line text-bad' : 'text-ink'}`}>{it.icon}{it.label}</button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

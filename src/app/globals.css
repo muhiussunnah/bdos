@@ -208,6 +208,15 @@
   .sb-ver { color: var(--sb-faint); }
   .sb-ver:hover { color: var(--sb-text); }
 
+  /* popover menu items (ThreeDot) — readable hover in both themes */
+  .menu-item { color: var(--text); transition: background .12s, color .12s; }
+  .menu-item .menu-ico { color: var(--dim); }
+  .menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
+  .menu-item:hover .menu-ico { color: var(--accent); }
+  .menu-item.is-danger { color: var(--red); border-top: 1px solid var(--border); }
+  .menu-item.is-danger .menu-ico { color: var(--red); }
+  .menu-item.is-danger:hover { background: var(--red-soft); color: var(--red); }
+
   .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
   .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 0 rgba(224,140,31,.55); animation: livepulse 1.6s ease-out infinite; }
   @keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(224,140,31,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,140,31,0); } 100% { box-shadow: 0 0 0 0 rgba(224,140,31,0); } }
