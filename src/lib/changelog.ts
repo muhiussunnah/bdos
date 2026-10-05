@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.0',
+    date: '2026-10-05',
+    title: 'Drip feed sending',
+    tag: 'feature',
+    notes: [
+      'Send to a list has a new "Drip feed" button next to "Send to N". Pick every 3, 5, 10, 15 or 30 minutes and the emails go out one at a time at that pace — the first one now, the rest on schedule. Resend holds and sends them, so you can close Klientic.',
+      'Scheduled emails show in Outreach with a "Scheduled · every N min" tag, the time each one goes out, a Scheduled filter and a Scheduled counter. Delete a scheduled email to cancel it before it is sent (stops the drip for that recipient).',
+      'Leads in a drip are marked Contacted right away, but their last-contact time and any follow-up are based on when their email actually goes out.',
+      '"Let the agent run automated follow-ups" is now off by default when you send to a list — tick it when you want the agent to chase replies.',
+    ],
+  },
+  {
     version: '1.1.10',
     date: '2026-10-05',
     title: 'Menus that stay on top & an "All emails" account filter',

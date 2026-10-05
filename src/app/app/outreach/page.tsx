@@ -12,17 +12,21 @@ import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateR
 import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf } from '@/components/SenderFilter';
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportMessages } from '@/lib/export';
+import { promoteScheduled } from '@/lib/scheduled';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead } from '@/lib/types';
 
-type Meta = { manual?: boolean; mode?: 'compose' | 'bulk'; attachments?: string[]; cc?: string[]; bcc?: string[]; html?: string };
+type Meta = { manual?: boolean; mode?: 'compose' | 'bulk'; attachments?: string[]; cc?: string[]; bcc?: string[]; html?: string; drip?: number; cancelled?: boolean };
 
 const VIEWS = [
   { key: 'all', label: 'All' },
   { key: 'auto', label: 'Automated' },
   { key: 'manual', label: 'Manual' },
+  { key: 'scheduled', label: 'Scheduled' },
   { key: 'failed', label: 'Failed' },
 ];
+
+const fmtWhen = (iso: string) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 const SORTS: { key: string; label: string; pick: (m: Message) => string | null; dir: SortDir }[] = [
   { key: 'newest', label: 'Newest first', pick: (m) => m.sent_at || m.created_at, dir: 'desc' },
@@ -33,7 +37,7 @@ const SORTS: { key: string; label: string; pick: (m: Message) => string | null; 
 ];
 
 export default function OutreachPage() {
-  const { project, supabase, refreshCounts } = useApp();
+  const { project, supabase, refreshCounts, user } = useApp();
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [leads, setLeads] = useState<Record<string, Lead>>({});
   const [loading, setLoading] = useState(true);
@@ -55,6 +59,7 @@ export default function OutreachPage() {
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
+    await promoteScheduled(supabase, user.id).catch(() => 0); // drip-fed emails whose time has come
     const { data } = await supabase.from('messages').select('*').eq('project_id', project.id).eq('direction', 'outbound').order('created_at', { ascending: false }).limit(1000);
     const list = (data as Message[]) || [];
     setMsgs(list);
@@ -68,7 +73,7 @@ export default function OutreachPage() {
       setLeads(map);
     }
     setLoading(false);
-  }, [project, supabase]);
+  }, [project, supabase, user.id]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { sel.clear(); }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -80,7 +85,8 @@ export default function OutreachPage() {
       if (view === 'manual' && !isManual(m)) return false;
       if (view === 'auto' && isManual(m)) return false;
       if (view === 'failed' && m.status !== 'failed') return false;
-      if (!inRange(m.sent_at || m.created_at, bounds)) return false;
+      if (view === 'scheduled' && m.status !== 'scheduled') return false;
+      if (!inRange(m.sent_at || m.scheduled_at || m.created_at, bounds)) return false;
       if (q) {
         const lead = m.lead_id ? leads[m.lead_id] : undefined;
         const hay = `${m.subject} ${m.to_email} ${m.body} ${lead?.company_name || ''} ${lead?.contact_name || ''}`.toLowerCase();
@@ -100,12 +106,23 @@ export default function OutreachPage() {
   async function doDelete() {
     if (!confirm) return;
     setBusy(true);
+    // drip-fed emails still waiting at Resend are cancelled first so they never go out
+    const pending = confirm.filter((id) => msgs.find((m) => m.id === id)?.status === 'scheduled');
+    let cancelled = 0;
+    if (pending.length) {
+      const res = await fetch('/api/outreach/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageIds: pending }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setBusy(false); return toast.error(d.error || 'Could not cancel the scheduled emails'); }
+      cancelled = d.cancelled || 0;
+    }
     const { error } = await supabase.from('messages').delete().in('id', confirm);
     setBusy(false);
     if (error) return toast.error(error.message);
-    toast.success(confirm.length === 1 ? 'Email deleted' : `${confirm.length} emails deleted`);
+    toast.success(cancelled ? `${cancelled} scheduled email${cancelled === 1 ? '' : 's'} cancelled and removed` : confirm.length === 1 ? 'Email deleted' : `${confirm.length} emails deleted`);
     sel.setMany(confirm, false); setConfirm(null); load();
   }
+  const scheduledCount = scoped.filter((m) => m.status === 'scheduled').length;
+  const pendingInConfirm = (confirm || []).filter((id) => msgs.find((m) => m.id === id)?.status === 'scheduled').length;
 
   if (!project) return <Thinking label="Loading…" />;
 
@@ -116,10 +133,11 @@ export default function OutreachPage() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Metric label="Sent" value={sent} icon={<Send size={13} />} />
         <Metric label="By the agent" value={auto} icon={<Sparkles size={13} />} />
         <Metric label="Sent manually" value={manual} icon={<Hand size={13} />} />
+        <Metric label="Scheduled" value={scheduledCount} icon={<Clock size={13} />} delta={scheduledCount ? 'drip feed in progress' : undefined} />
         <Metric label="Failed" value={failed} icon={<XCircle size={13} />} tone={failed ? 'down' : undefined} />
       </div>
 
@@ -179,6 +197,8 @@ export default function OutreachPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate font-bold text-ink">{m.subject || '(no subject)'}</span>
+                        {m.status === 'scheduled' && <span className="flex-none rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>Scheduled{meta.drip ? ` · every ${meta.drip} min` : ''}</span>}
+                        {meta.cancelled && <span className="flex-none rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}>Cancelled</span>}
                         {meta.manual ? (
                           <span className="flex-none rounded-md border border-line px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-faint">{meta.mode === 'bulk' ? 'Manual · list' : 'Manual'}</span>
                         ) : (
@@ -188,7 +208,7 @@ export default function OutreachPage() {
                       </div>
                       <div className="truncate text-[12px] text-dim">{who}{lead && m.to_email ? ` · ${m.to_email}` : ''}</div>
                     </div>
-                    <span className="whitespace-nowrap text-[11.5px] text-faint">{relTime(m.sent_at || m.created_at)}</span>
+                    <span className="whitespace-nowrap text-[11.5px] text-faint">{m.status === 'scheduled' && m.scheduled_at ? <span className="font-semibold" style={{ color: 'var(--amber)' }}>Goes out {fmtWhen(m.scheduled_at)}</span> : relTime(m.sent_at || m.created_at)}</span>
                     <ChevronDown size={15} className={`flex-none text-faint transition ${open === m.id ? 'rotate-180' : ''}`} />
                   </button>
                   <button onClick={() => setConfirm([m.id])} aria-label="Delete email"
@@ -226,7 +246,9 @@ export default function OutreachPage() {
 
       <ConfirmDialog open={!!confirm} busy={busy} onCancel={() => setConfirm(null)} onConfirm={doDelete}
         title={confirm && confirm.length > 1 ? `Delete ${confirm.length} emails?` : 'Delete this email?'}
-        body="This removes the record from Klientic only. Emails that were already delivered stay in the recipient's inbox." />
+        body={pendingInConfirm
+          ? `${pendingInConfirm} of these ${pendingInConfirm === 1 ? 'is' : 'are'} still scheduled — ${pendingInConfirm === 1 ? 'it' : 'they'} will be cancelled at Resend and never sent. Already delivered emails stay in the recipient's inbox.`
+          : "This removes the record from Klientic only. Emails that were already delivered stay in the recipient's inbox."} />
 
       <ComposeModal open={compose} onClose={() => setCompose(false)} onSent={() => { load(); refreshCounts(); }} />
       <BulkSendModal open={bulk} onClose={() => setBulk(false)} onDone={() => { load(); refreshCounts(); }} />

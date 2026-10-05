@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Send, Loader2, Upload, Users, Search, CheckCircle2, XCircle, ArrowLeft, ArrowRight, History, MailCheck } from 'lucide-react';
+import { Send, Loader2, Upload, Users, Search, CheckCircle2, XCircle, ArrowLeft, ArrowRight, History, MailCheck, Clock, ChevronDown } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal, StageTag } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
@@ -14,6 +14,7 @@ import { SentHistoryDialog, type HistoryTarget } from '@/components/SentHistoryD
 import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import { sendersFrom } from '@/lib/email/resend';
 import { EMPTY_HISTORY, historyFor, loadSentHistory, repairContactedLeads, type SentHistory } from '@/lib/sentHistory';
+import { DRIP_OPTIONS, dripDuration, dripEndsAt } from '@/lib/scheduled';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
@@ -88,7 +89,9 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [startFollowups, setStartFollowups] = useState(true);
+  const [startFollowups, setStartFollowups] = useState(false); // off unless the user opts in
+  const [drip, setDrip] = useState<number | null>(null);       // minutes between emails (drip feed)
+  const [dripMenu, setDripMenu] = useState(false);
   const bodyRef = useRef<RichEditorHandle>(null);
 
   // sending
@@ -210,8 +213,8 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
 
   const previewVars = recipients[0] ? recipientVars(recipients[0]) : { first_name: 'Anna', name: 'Anna Svensson', company: 'Acme AB', email: 'anna@acme.se', role: '', website: '', domain: 'acme.se' };
 
-  // ---- send
-  function send() {
+  // ---- send (minutes = drip interval; null sends everything right away)
+  function send(minutes: number | null = null) {
     if (!project) return;
     if (!recipients.length) return toast.error('No recipients');
     if (!subject.trim()) return toast.error('Add a subject');
@@ -230,16 +233,16 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
           lastContactedAt: (r.leadId && leadsById.get(r.leadId)?.last_contacted_at) || null,
           rows: histOf({ id: r.leadId, email: r.email }),
         })),
-        onConfirm: () => { markConfirmed(dups.map((r) => r.email)); void doSend(); },
+        onConfirm: () => { markConfirmed(dups.map((r) => r.email)); void doSend(minutes); },
       });
       return;
     }
-    void doSend();
+    void doSend(minutes);
   }
 
-  async function doSend() {
+  async function doSend(minutes: number | null = null) {
     if (!project) return;
-    setBusy(true); setStep('sending');
+    setDrip(minutes); setBusy(true); setStep('sending');
     let list = recipients;
     try {
       // CSV → optionally import first so sends link to real leads
@@ -260,12 +263,16 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
       }
 
       const batchId = `bulk_${Date.now().toString(36)}`;
+      const dripStartAt = new Date().toISOString(); // one timeline across all chunks
       setProgress({ done: 0, total: list.length });
       const all: SendResult[] = [];
       for (let i = 0; i < list.length; i += CHUNK) {
         const chunk = list.slice(i, i + CHUNK);
         const fd = new FormData();
-        fd.set('payload', JSON.stringify({ projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId, fromId: fromId || null, cc, bcc }));
+        fd.set('payload', JSON.stringify({
+          projectId: project.id, subject: subject.trim(), html: body, recipients: chunk, startFollowups, batchId, fromId: fromId || null, cc, bcc,
+          dripMinutes: minutes || 0, dripStartAt, dripOffset: i,
+        }));
         files.forEach((f) => fd.append('files', f));
         const res = await fetch('/api/outreach/bulk', { method: 'POST', body: fd });
         const data = await res.json().catch(() => ({}));
@@ -277,7 +284,8 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
       }
       const okCount = all.filter((r) => r.ok).length;
       if (okCount) rememberSubject(subject);
-      toast.success(`${okCount} of ${list.length} emails sent`);
+      if (minutes) toast.success(`${okCount} of ${list.length} emails queued — one every ${minutes} min, last one ${dripEndsAt(okCount, minutes).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      else toast.success(`${okCount} of ${list.length} emails sent`);
       onDone?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Bulk send failed');
@@ -454,9 +462,33 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
             <p className="hint">Every lead you send to moves from New to Contacted either way — this only decides whether the agent follows up later.</p>
           </div>
 
-          <div className="flex justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
             <button onClick={() => setStep('recipients')} className="btn btn-ghost"><ArrowLeft size={15} /> Recipients</button>
-            <button onClick={send} disabled={busy} className="btn btn-accent"><Send size={15} /> Send to {recipients.length}</button>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button onClick={() => setDripMenu((v) => !v)} disabled={busy || !recipients.length} className="btn btn-ghost" aria-haspopup="menu" aria-expanded={dripMenu}
+                  title="Send one email every few minutes instead of all at once">
+                  <Clock size={15} className="text-accent" /> Drip feed {recipients.length} <ChevronDown size={14} className="text-faint" />
+                </button>
+                {dripMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setDripMenu(false)} />
+                    <div role="menu" className="animate-pop absolute bottom-[calc(100%+6px)] right-0 z-50 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-pop">
+                      <div className="px-2.5 pb-1.5 pt-1 text-[10.5px] font-bold uppercase tracking-wide text-faint">One email every…</div>
+                      {DRIP_OPTIONS.map((m) => (
+                        <button key={m} role="menuitem" onClick={() => { setDripMenu(false); send(m); }}
+                          className="menu-item flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold">
+                          <span>{m} minutes</span>
+                          <span className="text-[11px] font-semibold text-faint">{recipients.length > 1 ? `all out in ${dripDuration(recipients.length, m)}` : 'sends now'}</span>
+                        </button>
+                      ))}
+                      <p className="px-2.5 pb-1 pt-1.5 text-[11px] leading-snug text-faint">The first email goes now; Resend sends the rest on schedule even if you close Klientic.</p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => send(null)} disabled={busy} className="btn btn-accent"><Send size={15} /> Send to {recipients.length}</button>
+            </div>
           </div>
         </div>
       )}
@@ -465,14 +497,14 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
         <div className="space-y-4">
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[12.5px] font-bold text-ink">
-              <span>{busy ? 'Sending…' : 'Finished'}</span><span className="text-dim">{progress.done} / {progress.total}</span>
+              <span>{busy ? (drip ? 'Scheduling the drip feed…' : 'Sending…') : 'Finished'}</span><span className="text-dim">{progress.done} / {progress.total}</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-surface-2">
               <div className="h-full rounded-full transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: 'linear-gradient(135deg,var(--accent),var(--accent-2))' }} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-line bg-surface p-3.5"><div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-dim"><CheckCircle2 size={13} className="text-ok" /> Sent</div><div className="mt-1 text-[22px] font-extrabold text-ink">{sentOk}</div></div>
+            <div className="rounded-xl border border-line bg-surface p-3.5"><div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-dim"><CheckCircle2 size={13} className="text-ok" /> {drip ? 'Queued' : 'Sent'}</div><div className="mt-1 text-[22px] font-extrabold text-ink">{sentOk}</div></div>
             <div className="rounded-xl border border-line bg-surface p-3.5"><div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-dim"><XCircle size={13} className="text-bad" /> Failed</div><div className="mt-1 text-[22px] font-extrabold text-ink">{failed.length}</div></div>
           </div>
           {failed.length > 0 && (
@@ -480,7 +512,13 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
               {failed.map((f, i) => <div key={i} className="py-0.5 text-dim"><b className="text-ink">{f.email}</b> — {f.error}</div>)}
             </div>
           )}
-          {busy ? <div className="flex items-center gap-2 text-[12.5px] text-dim"><Loader2 size={14} className="animate-spin text-accent" /> Keep this window open until sending completes.</div> : (
+          {drip && sentOk > 0 && !busy && (
+            <div className="flex items-start gap-2 rounded-xl border border-line bg-surface-2 p-3 text-[12.5px] text-dim">
+              <Clock size={14} className="mt-0.5 flex-none text-accent" />
+              <span>Drip feed running: one email every <b className="text-ink">{drip} min</b>, the last one goes out <b className="text-ink">{dripEndsAt(sentOk, drip).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</b>. You can close this window. To stop it, delete the scheduled emails in Outreach → Scheduled.</span>
+            </div>
+          )}
+          {busy ? <div className="flex items-center gap-2 text-[12.5px] text-dim"><Loader2 size={14} className="animate-spin text-accent" /> Keep this window open until {drip ? 'scheduling' : 'sending'} completes.</div> : (
             <div className="flex justify-end"><button onClick={onClose} className="btn btn-primary">Done</button></div>
           )}
         </div>

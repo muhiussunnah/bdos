@@ -20,6 +20,7 @@ import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
 import { exportLeads, exportThreads } from '@/lib/export';
+import { promoteScheduled } from '@/lib/scheduled';
 import { PIPELINE, isPipelineKey, stepOf, stageLabel, type PipelineKey } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead, Stage } from '@/lib/types';
@@ -51,7 +52,7 @@ const LS_STAGE = 'klientic.inbox.stage';
 const ALL_KEYS: StageKey[] = [...PIPELINE.map((p) => p.key), ...EXTRA.map((e) => e.key)];
 
 export default function InboxPage() {
-  const { project, supabase, refreshCounts } = useApp();
+  const { project, supabase, refreshCounts, user } = useApp();
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,7 @@ export default function InboxPage() {
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
+    await promoteScheduled(supabase, user.id).catch(() => 0); // drip-fed emails whose time has come
     const [{ data: m }, { data: l }] = await Promise.all([
       supabase.from('messages').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).limit(5000),
       supabase.from('leads').select('*').eq('project_id', project.id).limit(5000),
@@ -82,7 +84,7 @@ export default function InboxPage() {
     setMsgs((m as Message[]) || []);
     setLeads((l as Lead[]) || []);
     setLoading(false);
-  }, [project, supabase]);
+  }, [project, supabase, user.id]);
   useEffect(() => { load(); }, [load]);
 
   const leadById = useMemo(() => { const map: Record<string, Lead> = {}; leads.forEach((l) => (map[l.id] = l)); return map; }, [leads]);

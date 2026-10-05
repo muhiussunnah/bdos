@@ -49,7 +49,7 @@ export function buildThreads(messages: Message[], leadById: Record<string, Lead>
 }
 
 export function stamp(m: Message): number {
-  return new Date(m.sent_at || m.created_at).getTime();
+  return new Date(m.sent_at || m.scheduled_at || m.created_at).getTime();
 }
 
 /* ── date ranges (shared by Leads, Companies, Outreach and Inbox) ─────────────── */

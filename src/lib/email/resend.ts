@@ -18,6 +18,16 @@ export interface SendArgs {
   bcc?: string[];
   attachments?: Attachment[];
   apiKey: string;
+  /** ISO 8601 time — Resend holds the email and sends it then (max 30 days ahead). */
+  scheduledAt?: string;
+}
+
+/** Cancel an email that was scheduled with `scheduledAt` and has not gone out yet. */
+export async function cancelScheduledEmail(apiKey: string, resendId: string): Promise<boolean> {
+  const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(resendId)}/cancel`, {
+    method: 'POST', headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  return res.ok;
 }
 
 /** Send one email through Resend's REST API (edge-safe, no SDK needed). */
@@ -38,6 +48,7 @@ export async function sendEmail(args: SendArgs): Promise<{ id: string }> {
       ...(args.replyTo ? { reply_to: args.replyTo } : {}),
       ...(args.cc?.length ? { cc: args.cc } : {}),
       ...(args.bcc?.length ? { bcc: args.bcc } : {}),
+      ...(args.scheduledAt ? { scheduled_at: args.scheduledAt } : {}),
       ...(args.attachments?.length
         ? { attachments: args.attachments.map((a) => ({ filename: a.filename, content: a.content, ...(a.contentType ? { content_type: a.contentType } : {}) })) }
         : {}),

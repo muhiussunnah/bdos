@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { promoteScheduled } from '@/lib/scheduled';
 import type { Profile, Project, UserSettings } from '@/lib/types';
 
 interface AppState {
@@ -93,6 +94,7 @@ export function AppProvider({
 
   const refreshCounts = useCallback(async () => {
     if (!activeId) return;
+    await promoteScheduled(supabase, user.id).catch(() => 0); // drip-fed emails whose time has come
     const nowIso = new Date().toISOString();
     const [{ count: inbox }, { count: tasks }, { count: followups }] = await Promise.all([
       supabase.from('messages').select('id', { count: 'exact', head: true })
