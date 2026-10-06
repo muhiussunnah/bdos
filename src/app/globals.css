@@ -217,6 +217,29 @@
   .menu-item.is-danger .menu-ico { color: var(--red); }
   .menu-item.is-danger:hover { background: var(--red-soft); color: var(--red); }
 
+  /* page hero banners — light: airy lavender; dark: deep plum */
+  .hero {
+    background: linear-gradient(135deg, #FFFFFF 0%, #F7F2FD 50%, #EFE7FA 100%);
+    color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow);
+  }
+  .hero .hero-dim { color: var(--dim); }
+  .hero .hero-faint { color: var(--faint); }
+  .hero .hero-glow { background: radial-gradient(circle, rgba(164, 53, 232, .22), transparent 70%); }
+  .hero .hero-ghost { background: #FFFFFF; border: 1px solid var(--border); color: var(--text); }
+  .hero .hero-ghost:hover { border-color: var(--border-2); background: var(--surface-2); }
+  .hero .hero-pill { border: 1px solid var(--border); background: #FFFFFF; color: var(--text); }
+  .hero .hero-hand { color: var(--accent); }
+  .dark .hero {
+    background: linear-gradient(135deg, #241636, #0E0916); color: #fff; border-color: transparent; box-shadow: none;
+  }
+  .dark .hero .hero-dim { color: rgba(255, 255, 255, .68); }
+  .dark .hero .hero-faint { color: rgba(255, 255, 255, .45); }
+  .dark .hero .hero-glow { background: radial-gradient(circle, rgba(164, 53, 232, .5), transparent 70%); }
+  .dark .hero .hero-ghost { background: rgba(255, 255, 255, .10); border-color: rgba(255, 255, 255, .15); color: #fff; }
+  .dark .hero .hero-ghost:hover { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .25); }
+  .dark .hero .hero-pill { border-color: rgba(255, 255, 255, .15); background: rgba(255, 255, 255, .05); color: #fff; }
+  .dark .hero .hero-hand { color: rgba(255, 255, 255, .9); }
+
   .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
   .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 0 rgba(224,140,31,.55); animation: livepulse 1.6s ease-out infinite; }
   @keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(224,140,31,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,140,31,0); } 100% { box-shadow: 0 0 0 0 rgba(224,140,31,0); } }

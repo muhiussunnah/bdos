@@ -8,6 +8,7 @@ import {
   Upload, Code, Eraser, AArrowUp, AArrowDown, Loader2, TextSelect, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDialogs } from '@/components/providers/DialogProvider';
 
 export interface RichEditorHandle {
   insertText: (text: string) => void;
@@ -73,6 +74,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const [sizeText, setSizeText] = useState('14');
   const [sizeOpen, setSizeOpen] = useState(false);
   const sizeEditing = useRef(false);
+  const { prompt } = useDialogs();
 
   // keep DOM in sync when the value changes from outside (AI draft, reset)
   useEffect(() => {
@@ -195,20 +197,23 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (Number.isFinite(n) && n > 0 && n !== currentPx()) applyFontSize(n); else setSizeText(String(currentPx()));
   }
 
-  function link() {
+  async function link() {
     saveSelection();
     const sel = window.getSelection()?.toString();
-    const url = window.prompt('Link URL', 'https://');
-    if (!url) return;
+    const v = await prompt({ title: 'Insert link', fields: [{ key: 'url', label: 'Link URL', value: 'https://', type: 'url', placeholder: 'https://…' }], confirmLabel: 'Insert link' });
+    const url = v?.url?.trim();
+    if (!url || url === 'https://') return;
     restoreSelection();
     if (sel) exec('createLink', url);
     else insertHtml(`<a href="${url.replace(/"/g, '&quot;')}" target="_blank">${url}</a>`);
   }
 
-  function imageByUrl() {
+  async function imageByUrl() {
     saveSelection();
-    const url = window.prompt('Image URL', 'https://');
-    if (!url) return;
+    const v = await prompt({ title: 'Insert image from URL', fields: [{ key: 'url', label: 'Image URL', value: 'https://', type: 'url', placeholder: 'https://…/picture.png' }], confirmLabel: 'Insert image' });
+    const url = v?.url?.trim();
+    if (!url || url === 'https://') return;
+    restoreSelection();
     insertHtml(`<img src="${url.replace(/"/g, '&quot;')}" alt="" style="max-width:100%;height:auto">`);
   }
 
@@ -224,8 +229,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     finally { setUploading(false); }
   }
 
-  function table() {
-    const rows = Number(window.prompt('Rows', '2') || 0), cols = Number(window.prompt('Columns', '2') || 0);
+  async function table() {
+    saveSelection();
+    const v = await prompt({ title: 'Insert table', fields: [{ key: 'rows', label: 'Rows', value: '2', type: 'number', min: 1, max: 50 }, { key: 'cols', label: 'Columns', value: '2', type: 'number', min: 1, max: 12 }], confirmLabel: 'Insert table' });
+    if (!v) return;
+    restoreSelection();
+    const rows = Math.min(50, Number(v.rows) || 0), cols = Math.min(12, Number(v.cols) || 0);
     if (!rows || !cols) return;
     const cell = '<td style="border:1px solid #d9d6e0;padding:6px 10px">&nbsp;</td>';
     insertHtml(`<table style="border-collapse:collapse;width:100%"><tbody>${Array.from({ length: rows }, () => `<tr>${cell.repeat(cols)}</tr>`).join('')}</tbody></table><p><br></p>`);

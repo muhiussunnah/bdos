@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Sparkles, Send, Clock, BarChart3, ListChecks, Loader2, Zap, ArrowRight } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Thinking } from '@/components/ui';
+import { Hero } from '@/components/Hero';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
@@ -69,19 +70,18 @@ export default function AutopilotPage() {
 
   return (
     <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg,#241636,#0E0916)' }}>
+      <Hero>
         <div className="relative z-10 flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}><Zap size={20} /></span>
+          <span className="grid h-11 w-11 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(135deg,#A435E8,#E0457E)' }}><Zap size={20} /></span>
           <div>
             <div className="text-[17px] font-extrabold">Sales agent is online</div>
-            <div className="text-[13px] text-white/60">Research, outreach, follow-up and inbox triage — you approve, it executes.</div>
+            <div className="hero-dim text-[13px]">Research, outreach, follow-up and inbox triage — you approve, it executes.</div>
           </div>
-          <span className="ml-auto flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[12px] font-semibold">
+          <span className="hero-pill ml-auto flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold">
             <span className="animate-pulse2 h-2 w-2 rounded-full" style={{ background: 'var(--green)' }} /> Active
           </span>
         </div>
-        <div className="pointer-events-none absolute -right-10 -top-10 h-52 w-52 rounded-full" style={{ background: 'radial-gradient(circle,rgba(164,53,232,.45),transparent 70%)' }} />
-      </div>
+      </Hero>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {actions.map((a) => {

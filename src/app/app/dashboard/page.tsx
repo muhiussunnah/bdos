@@ -6,6 +6,7 @@ import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRig
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, Thinking } from '@/components/ui';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
+import { Hero } from '@/components/Hero';
 import { PIPELINE } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
@@ -53,32 +54,31 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       {/* greeting banner */}
-      <div className="relative overflow-hidden rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg,#171022,#241636)' }}>
+      <Hero>
         <div className="relative z-10 max-w-xl">
           <div className="text-[22px] font-extrabold tracking-tight">Good day, {profile?.full_name?.split(' ')[0] || 'there'} 👋</div>
-          <p className="mt-1.5 text-[14px] leading-relaxed text-white/70">
+          <p className="hero-dim mt-1.5 text-[14px] leading-relaxed">
             You have {plural(callsToday, 'call')} today and {plural(dueFollowups.length, 'follow-up')}.
             {counts.inbox > 0 && ` ${counts.inbox} ${counts.inbox === 1 ? 'reply is' : 'replies are'} waiting for your answer.`}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/app/leads?add=1" className="btn btn-accent"><Plus size={15} /> Add new lead</Link>
-            <Link href="/app/reports" className="btn btn-ghost !bg-white/10 !text-white !border-white/15"><BarChart3 size={15} /> View report</Link>
-            <Link href="/app/leads?discover=1" className="btn btn-ghost !bg-white/10 !text-white !border-white/15"><Sparkles size={15} /> Find more leads</Link>
+            <Link href="/app/reports" className="btn hero-ghost"><BarChart3 size={15} /> View report</Link>
+            <Link href="/app/leads?discover=1" className="btn hero-ghost"><Sparkles size={15} /> Find more leads</Link>
           </div>
         </div>
         {/* "Let's get meetings!" + rocket */}
         <div className="pointer-events-none absolute inset-y-0 right-5 z-10 hidden items-center gap-3 md:flex lg:right-8 lg:gap-5">
-          <div className="relative -rotate-6 text-center">
-            <div className="hand text-[24px] font-bold leading-[1.05] text-white/90 lg:text-[27px]">Let&apos;s<br />get meetings!</div>
+          <div className="hero-hand relative -rotate-6 text-center">
+            <div className="hand text-[24px] font-bold leading-[1.05] lg:text-[27px]">Let&apos;s<br />get meetings!</div>
             <svg className="mx-auto mt-1 ml-10" width="64" height="34" viewBox="0 0 64 34" fill="none" aria-hidden>
-              <path d="M4 4 C 16 30, 38 32, 58 18" stroke="white" strokeOpacity=".85" strokeWidth="2.4" strokeLinecap="round" />
-              <path d="M49 14 L 59 18 L 53 27" stroke="white" strokeOpacity=".85" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 4 C 16 30, 38 32, 58 18" stroke="currentColor" strokeOpacity=".85" strokeWidth="2.4" strokeLinecap="round" />
+              <path d="M49 14 L 59 18 L 53 27" stroke="currentColor" strokeOpacity=".85" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <span className="text-[72px] leading-none lg:text-[92px]" style={{ filter: 'drop-shadow(0 18px 28px rgba(164,53,232,.5))' }} aria-hidden>🚀</span>
+          <span className="text-[72px] leading-none lg:text-[92px]" style={{ filter: 'drop-shadow(0 18px 28px rgba(164,53,232,.35))' }} aria-hidden>🚀</span>
         </div>
-        <div className="pointer-events-none absolute -right-10 -top-10 h-56 w-56 rounded-full" style={{ background: 'radial-gradient(circle,rgba(164,53,232,.45),transparent 70%)' }} />
-      </div>
+      </Hero>
 
       {/* sales pipeline */}
       <Card className="relative">

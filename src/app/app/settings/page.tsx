@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck, Star, Trash2, Plus } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
+import { useDialogs } from '@/components/providers/DialogProvider';
 import { Card, Thinking } from '@/components/ui';
 import { SecretInput } from '@/components/SecretInput';
 import { PROVIDERS, LANGS, type ProviderKey } from '@/lib/constants';
@@ -92,6 +93,7 @@ function AITab({ secrets, reload }: { secrets: Secrets; reload: () => void }) {
 
 function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS)[number]; state?: Secrets[string]; reload: () => void }) {
   const { user, supabase } = useApp();
+  const { confirm } = useDialogs();
   const saved = state?.key || '';
   const [key, setKey] = useState(saved);
   const [model, setModel] = useState(provider.models[0]);
@@ -109,7 +111,7 @@ function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS
   }
 
   async function remove() {
-    if (!window.confirm(`Remove the saved ${provider.label} key?`)) return;
+    if (!(await confirm({ title: `Remove the ${provider.label} key?`, body: 'The agent stops using this provider until you add a key again.', confirmLabel: 'Remove key' }))) return;
     setBusy('remove');
     const { error } = await supabase.from('user_secrets').delete().eq('owner_id', user.id).eq('provider', provider.key);
     setBusy(null);
@@ -151,6 +153,7 @@ function ProviderCard({ provider, state, reload }: { provider: (typeof PROVIDERS
 
 function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Secrets; reload: () => void; settings: ReturnType<typeof useApp>['settings']; refreshSettings: () => void }) {
   const { user, supabase } = useApp();
+  const { confirm } = useDialogs();
   const saved = secrets.resend?.key || '';
   const [key, setKey] = useState(saved);
   const [senders, setSenders] = useState<Sender[]>(() => sendersFrom(settings));
@@ -195,7 +198,7 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
   }
 
   async function removeKey() {
-    if (!window.confirm('Remove the saved Resend key? Sending will stop until you add one.')) return;
+    if (!(await confirm({ title: 'Remove the Resend key?', body: 'Sending stops until you add a key again. Your sender addresses stay saved.', confirmLabel: 'Remove key' }))) return;
     const { error } = await supabase.from('user_secrets').delete().eq('owner_id', user.id).eq('provider', 'resend');
     if (error) return toast.error(error.message);
     toast.success('Resend key removed'); setKey(''); reload();

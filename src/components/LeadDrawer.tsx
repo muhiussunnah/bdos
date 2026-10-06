@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
+import { useDialogs } from '@/components/providers/DialogProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
 import { ComposeModal } from '@/components/ComposeModal';
 import { STAGES } from '@/lib/utils';
@@ -16,6 +17,7 @@ type Prep = { summary: string; what_they_do: string; why_relevant: string; talki
 
 export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onClose: () => void; onChange: () => void }) {
   const { supabase } = useApp();
+  const { confirm } = useDialogs();
   const [tab, setTab] = useState<'overview' | 'outreach' | 'prep'>('overview');
   const [draft, setDraft] = useState<{ subject: string; body: string; step: number } | null>(null);
   const [prep, setPrep] = useState<Prep | null>(null);
@@ -78,8 +80,14 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
   }
 
   async function del() {
-    if (!confirm('Delete this lead?')) return;
-    await supabase.from('leads').delete().eq('id', lead!.id);
+    const ok = await confirm({
+      title: `Delete ${lead!.company_name}?`,
+      body: <>This permanently removes the lead together with every email, reply and task linked to it. This cannot be undone.</>,
+      confirmLabel: 'Delete lead',
+    });
+    if (!ok) return;
+    const { error } = await supabase.from('leads').delete().eq('id', lead!.id);
+    if (error) return toast.error(error.message);
     toast.success('Lead deleted'); onChange(); onClose();
   }
 

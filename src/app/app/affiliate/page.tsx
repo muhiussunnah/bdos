@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Share2, Copy, Users, Gift, Loader2, Check } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Metric, Thinking } from '@/components/ui';
+import { Hero } from '@/components/Hero';
 import { BRAND } from '@/lib/constants';
 
 export default function AffiliatePage() {
@@ -39,14 +40,13 @@ export default function AffiliatePage() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="relative overflow-hidden rounded-xl p-6 text-white" style={{ background: 'linear-gradient(135deg,#241636,#0E0916)' }}>
+      <Hero>
         <div className="relative z-10">
-          <div className="flex items-center gap-2 text-[13px] font-bold text-white/70"><Gift size={15} className="text-[#E0457E]" /> Referral program</div>
+          <div className="hero-dim flex items-center gap-2 text-[13px] font-bold"><Gift size={15} className="text-[#E0457E]" /> Referral program</div>
           <h2 className="mt-2 text-[22px] font-black tracking-tight">Earn 30% recurring for every client you bring</h2>
-          <p className="mt-1.5 max-w-lg text-[13px] text-white/60">Share your link. When someone signs up and subscribes through it, you earn 30% of their plan — every month, for as long as they stay.</p>
+          <p className="hero-dim mt-1.5 max-w-lg text-[13px]">Share your link. When someone signs up and subscribes through it, you earn 30% of their plan — every month, for as long as they stay.</p>
         </div>
-        <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full" style={{ background: 'radial-gradient(circle,rgba(164,53,232,.5),transparent 70%)' }} />
-      </div>
+      </Hero>
 
       <div className="grid gap-3.5 sm:grid-cols-3">
         <Metric label="Your referrals" value={referrals} icon={<Users size={13} />} />

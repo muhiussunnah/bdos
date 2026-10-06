@@ -27,6 +27,17 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.4',
+    date: '2026-10-06',
+    title: 'No more browser popups & a light-mode hero',
+    tag: 'improvement',
+    notes: [
+      'Every "klientic.com says…" browser popup is gone. Deleting a project or lead and removing an API key now use Klientic\'s own confirmation dialog, which names what you are deleting and what goes with it.',
+      'The email editor asks for link, image and table details in a proper dialog instead of the browser prompt.',
+      'The dashboard, Autopilot and Affiliate hero banners are white-to-lavender with dark text in light mode. Dark mode keeps the deep plum look.',
+    ],
+  },
+  {
     version: '1.2.3',
     date: '2026-10-06',
     title: 'Cleaner NEXT dates',

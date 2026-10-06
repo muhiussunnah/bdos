@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, FolderKanban, Check, Loader2, Star, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
+import { useDialogs } from '@/components/providers/DialogProvider';
 import { Card, Modal, EmptyState } from '@/components/ui';
 import { LANGS, PROVIDERS } from '@/lib/constants';
 import type { Project } from '@/lib/types';
@@ -58,6 +59,7 @@ export default function ProjectsPage() {
 
 function ProjectModal({ project, onClose, onSaved }: { project: Project | null; onClose: () => void; onSaved: () => void }) {
   const { user, supabase, projects, setProjectId } = useApp();
+  const { confirm } = useDialogs();
   const [f, setF] = useState<Partial<Project>>(project || {
     name: '', color: COLORS[projects.length % COLORS.length], website: '', company_info: '', product_description: '',
     sales_instructions: '', target_industries: [], outreach_language: 'en', follow_up_days: [3, 7, 21], ai_model: '',
@@ -95,8 +97,15 @@ function ProjectModal({ project, onClose, onSaved }: { project: Project | null; 
   }
 
   async function remove() {
-    if (!project || !confirm('Delete this project and all its data?')) return;
-    await supabase.from('projects').delete().eq('id', project.id);
+    if (!project) return;
+    const ok = await confirm({
+      title: `Delete ${project.name}?`,
+      body: <>This permanently removes the project with <b className="text-ink">every lead, email, reply, task and report</b> in it. This cannot be undone.</>,
+      confirmLabel: 'Delete project',
+    });
+    if (!ok) return;
+    const { error } = await supabase.from('projects').delete().eq('id', project.id);
+    if (error) return toast.error(error.message);
     toast.success('Project deleted'); onSaved();
   }
 
