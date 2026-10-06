@@ -29,6 +29,12 @@ export function ThreeDot({ items, label = 'More actions', className }: { items: 
 
 const WIDTH = 240;
 
+/** Same popover with your own trigger (e.g. an owner badge). */
+export function AnchoredMenu({ anchor, items, open, onClose }: { anchor: HTMLElement | null; items: MenuItem[]; open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return <MenuPopover anchor={anchor} items={items} onClose={onClose} />;
+}
+
 function MenuPopover({ anchor, items, onClose }: { anchor: HTMLElement | null; items: MenuItem[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);

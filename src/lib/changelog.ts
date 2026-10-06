@@ -27,6 +27,21 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.2',
+    date: '2026-10-06',
+    title: 'Call → result → next step: the salesperson workflow',
+    tag: 'feature',
+    notes: [
+      'Stage 2 is now "Outreach sent": we emailed them, now call or email again. Follow-up is one stage — the system counts attempts ("Follow-up · Attempt 2"), nobody picks Follow-up 1/2/3 by hand.',
+      'New lead card front: owner initials (click to assign a salesperson), decision maker or "No decision maker yet", primary email with a pencil to replace the general address (the old one is kept in the history and all future emails go to the new one), phone, last action, and a NEXT line.',
+      'CALL button on every card and follow-up row: opens the dialer, logs date, time and salesperson, then asks for the result — Meeting booked, Got contact details (saves the decision maker on the spot), Call again, No answer, Not interested — plus a short note. Call again / No answer / Got contact need a follow-up date (3 working days suggested, editable) and create the call task for that day. Meeting booked → Meeting booked, Not interested → Disqualified.',
+      'Follow-up list is a work queue: Overdue (red), Today (orange), Upcoming filters, sorted oldest first, with decision maker, email + phone, last action, NEXT, owner, and Call / Email / ••• on every row. Change the next date from the menu.',
+      'Today\'s tasks groups by Overdue / Today / Upcoming, shows the scheduled calls with Call and Log result buttons, and Rebuild no longer wipes them.',
+      'Replying to an Outreach-sent lead moves it to Follow-up with the next touch planned. A reply from an unknown address can be linked to a lead from the conversation — that address becomes the primary email.',
+      'One-time database update: run supabase/migrations/20261006_lead_data.sql in Supabase → SQL Editor (adds leads.data). Until then, saving a call result or primary contact shows a reminder.',
+    ],
+  },
+  {
     version: '1.2.1',
     date: '2026-10-05',
     title: 'Follow-ups box really starts unticked',

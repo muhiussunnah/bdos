@@ -1,0 +1,11 @@
+-- v1.3.0 — sales workflow (call flow, primary contact, owner, attempts)
+-- Run once in Supabase → SQL Editor. Safe to re-run.
+--
+-- `data` holds per-lead workflow state that has no column of its own:
+--   owner        sender-identity id of the salesperson who owns the lead
+--   prev_emails  earlier (general) addresses kept when a primary email replaces them
+--   attempts     how many times we tried (emails + calls) — shown as "Follow-up · Attempt N"
+--   calls        number of calls logged
+--   last_call    { at, by }                      — set when CALL is pressed
+--   last_action  { at, result, note, by }        — the latest call result
+alter table public.leads add column if not exists data jsonb not null default '{}'::jsonb;

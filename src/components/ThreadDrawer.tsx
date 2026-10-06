@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2 } from 'lucide-react';
+import { useApp } from '@/components/providers/AppProvider';
 import { Drawer } from '@/components/ui';
+import { LinkLeadModal, useSalesperson } from '@/components/sales/CallFlow';
+import { afterReply } from '@/lib/sales';
 import { relTime } from '@/lib/utils';
 import { PIPELINE, stepOf, stageLabel } from '@/lib/pipeline';
 import type { Thread } from '@/lib/threads';
@@ -23,11 +26,14 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   onDelete?: (leadId: string) => void;
   onDeleteThread?: (threadKey: string) => void;
 }) {
+  const { supabase } = useApp();
+  const { by } = useSalesperson(thread?.lead || null);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setReply(''); setTimeout(() => endRef.current?.scrollIntoView({ block: 'end' }), 60); }, [thread?.key]);
+  useEffect(() => { setReply(''); setLink(false); setTimeout(() => endRef.current?.scrollIntoView({ block: 'end' }), 60); }, [thread?.key]);
 
   if (!thread) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;
   const { lead, messages } = thread;
@@ -51,6 +57,8 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
         const res = await fetch('/api/outreach/compose', { method: 'POST', body: fd });
         const d = await res.json(); if (!res.ok) throw new Error(d.error);
       }
+      // answering an Outreach-sent lead moves it to Follow-up with the next touch planned
+      if (lead) await afterReply(supabase, lead, by).catch(() => undefined);
       toast.success('Reply sent'); setReply(''); onChange();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed'); }
     finally { setBusy(false); }
@@ -84,6 +92,13 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
           </div>
         </div>
       }>
+      {!lead && thread.counterpart && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line bg-surface-2 px-3.5 py-2.5 text-[12.5px] text-dim">
+          <span className="min-w-0 flex-1">Not linked to a lead — {thread.counterpart} may be a decision maker replying from another address.</span>
+          <button onClick={() => setLink(true)} className="btn btn-ghost btn-sm"><Link2 size={13} /> Link to a lead</button>
+          <LinkLeadModal open={link} onClose={() => setLink(false)} onDone={onChange} projectId={messages[0].project_id} messageIds={messages.map((m) => m.id)} counterpart={thread.counterpart} />
+        </div>
+      )}
       {lead && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[12.5px] text-dim">
           <button onClick={() => onOpenLead(lead)} className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-ink">

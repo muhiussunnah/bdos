@@ -45,13 +45,14 @@ export function priorityFromScores(fit: number, opp: number): 'A' | 'B' | 'C' {
   return 'C';
 }
 
-/** Every database stage with the label used on the pipeline cards (see lib/pipeline.ts). */
+/**
+ * Stages a user can move a lead to (pickers, bulk move). One "Follow-up" entry:
+ * attempts are counted by the system (followup1/2/3 are never chosen by hand).
+ */
 export const STAGES: { key: string; label: string }[] = [
   { key: 'new', label: 'New' },
-  { key: 'contacted', label: 'Contacted' },
-  { key: 'followup1', label: 'Follow-up 1' },
-  { key: 'followup2', label: 'Follow-up 2' },
-  { key: 'followup3', label: 'Follow-up 3' },
+  { key: 'contacted', label: 'Outreach sent' },
+  { key: 'followup1', label: 'Follow-up' },
   { key: 'meeting', label: 'Meeting booked' },
   { key: 'positive', label: 'Active deal' },
   { key: 'closed', label: 'Won' },

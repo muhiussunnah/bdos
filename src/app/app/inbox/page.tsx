@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
-  Mail, Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2, Phone,
+  Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2,
   FileText, XCircle, PhoneCall, PenLine, TrendingUp,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
@@ -16,6 +16,7 @@ import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { ThreeDot } from '@/components/Menu';
+import { LeadFront } from '@/components/sales/LeadFront';
 import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_SENDERS } from '@/components/SenderFilter';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
@@ -40,7 +41,7 @@ const STEP_ICON: Record<PipelineKey, React.ReactNode> = {
 
 const EMPTY: Record<PipelineKey, string> = {
   lead: 'No new leads. Use Find leads or Add lead to fill the pipeline.',
-  contacted: 'Nobody in Contacted. Leads move here automatically after the first email or call.',
+  contacted: 'Nobody in Outreach sent. Leads land here after the first email — call them, log the result, and the system schedules what is next.',
   followup: 'No follow-ups pending.',
   meeting: 'No booked meetings yet. Answer a reply and mark it as Meeting booked.',
   deal: 'No active deals yet. Mark a lead as Active deal once a proposal is sent.',
@@ -240,7 +241,7 @@ export default function InboxPage() {
           {stage === 'followup' && <FollowupList leads={byStep.followup} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
           {isPipelineKey(stage) && stage !== 'followup' && (
             <LeadList key={stage} pagerKey={`inbox-${stage}`} leads={byStep[stage]} q={q} empty={EMPTY[stage]} onOpen={openConversationOrLead} onOpenLead={setDrawerLead}
-              onWrite={setComposeLead} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />
+              onWrite={setComposeLead} onChange={refresh} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />
           )}
         </>
       )}
@@ -335,12 +336,12 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
   );
 }
 
-/* ── Pipeline steps (Lead, Contacted, Meeting booked, Active deal, Won, Disqualified): lead cards ── */
-function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, threadFor, menuFor }: {
-  leads: Lead[]; q: string; empty: string; pagerKey: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void; onWrite: (l: Lead) => void;
+/* ── Pipeline steps (Lead, Outreach sent, Meeting booked, Active deal, Won, Disqualified): lead cards ── */
+function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, onChange, threadFor, menuFor }: {
+  leads: Lead[]; q: string; empty: string; pagerKey: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void; onWrite: (l: Lead) => void; onChange: () => void;
   threadFor: (leadId: string) => Thread | null; menuFor: (leadId: string) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 }) {
-  const filtered = useMemo(() => leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''}`.toLowerCase().includes(q.toLowerCase())), [leads, q]);
+  const filtered = useMemo(() => leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''} ${l.role || ''}`.toLowerCase().includes(q.toLowerCase())), [leads, q]);
   const pager = usePager(filtered, pagerKey, 24);
   useEffect(() => { pager.reset(); }, [q, leads.length]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!filtered.length) return <Card><EmptyState icon={<Trophy size={38} />} title={q ? 'No matches' : 'Nothing here yet'} sub={empty} /></Card>;
@@ -350,30 +351,12 @@ function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, thre
         {pager.slice.map((l, i) => {
           const t = threadFor(l.id);
           return (
-            <div key={l.id} className="card reveal !p-4 transition hover:-translate-y-0.5 hover:shadow-pop" style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}>
-              <div className="flex items-start gap-3">
-                <Avatar name={l.company_name} size={40} />
-                <button onClick={() => onOpen(l)} className="min-w-0 flex-1 text-left" title={t ? 'Open the full conversation' : 'Open lead'}>
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-bold text-ink">{l.company_name}</span>
-                    <span className={`stagetag s-${l.stage} flex-none`}>{stageLabel(l.stage)}</span>
-                  </div>
-                  {l.contact_name && <div className="truncate text-[12.5px] text-dim">{l.contact_name}{l.role ? ` · ${l.role}` : ''}</div>}
-                  {l.email && <div className="mt-1 flex items-center gap-1.5 truncate text-[12px] text-faint"><Mail size={11} /> {l.email}</div>}
-                  {l.phone && <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-faint"><Phone size={11} /> {l.phone}</div>}
-                </button>
-                <ThreeDot items={[
-                  ...(t ? [{ label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) }] : []),
-                  { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },
-                  ...menuFor(l.id).filter((m) => m.label !== 'Open conversation'),
-                ]} />
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
-                {t ? <span className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-px font-semibold text-dim"><MessagesSquare size={11} /> {t.messages.length} msg · {t.inboundCount} from them</span> : <span>No messages yet</span>}
-                {l.last_contacted_at && <span className="ml-auto">Last contact {relTime(l.last_contacted_at)}</span>}
-                {!l.last_contacted_at && l.email && <button onClick={() => onWrite(l)} className="btn btn-ghost btn-sm ml-auto !py-1"><Send size={12} /> Write email</button>}
-              </div>
-            </div>
+            <LeadFront key={l.id} lead={l} thread={t} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange}
+              menu={[
+                ...(t ? [{ label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) }] : []),
+                { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },
+                ...menuFor(l.id).filter((m) => m.label !== 'Open conversation'),
+              ]} />
           );
         })}
       </div>

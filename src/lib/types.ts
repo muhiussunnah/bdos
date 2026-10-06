@@ -40,6 +40,19 @@ export interface Project {
   updated_at: string;
 }
 
+/** Latest thing that happened on a call (see lib/sales.ts). */
+export type CallResult = 'meeting' | 'contact' | 'call_again' | 'no_answer' | 'not_interested';
+
+/** Workflow state kept in leads.data (jsonb). Every field is optional — the column may be empty. */
+export interface LeadData {
+  owner?: string;             // sender identity id (the salesperson)
+  prev_emails?: string[];     // general addresses replaced by a primary email
+  attempts?: number;          // emails + calls so far → "Follow-up · Attempt N"
+  calls?: number;
+  last_call?: { at: string; by: string };
+  last_action?: { at: string; result: CallResult; note?: string; by: string; next_at?: string | null };
+}
+
 export interface Lead {
   id: string;
   project_id: string;
@@ -64,6 +77,7 @@ export interface Lead {
   source: string;
   last_contacted_at: string | null;
   next_action_at: string | null;
+  data?: LeadData | null;     // added 2026-10-06 (supabase/migrations/20261006_lead_data.sql)
   created_at: string;
   updated_at: string;
 }

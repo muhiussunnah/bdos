@@ -7,7 +7,9 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
 import { ComposeModal } from '@/components/ComposeModal';
 import { STAGES } from '@/lib/utils';
-import { stageLabel } from '@/lib/pipeline';
+import { stageLabel, stepOf } from '@/lib/pipeline';
+import { PrimaryContactModal } from '@/components/sales/CallFlow';
+import { decisionMaker, leadData, lastActionLabel, nextLabel } from '@/lib/sales';
 import type { Lead } from '@/lib/types';
 
 type Prep = { summary: string; what_they_do: string; why_relevant: string; talking_points: string[]; objections: string[]; next_steps: string[] };
@@ -19,8 +21,9 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
   const [prep, setPrep] = useState<Prep | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [compose, setCompose] = useState(false);
+  const [contact, setContact] = useState(false);
 
-  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); setCompose(false); }, [lead?.id]);
+  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); setCompose(false); setContact(false); }, [lead?.id]);
 
   if (!lead) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;
 
@@ -125,24 +128,32 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
             <Field icon={<Globe size={14} />} label="Website" value={lead.website} href={lead.website || undefined} />
             <Field icon={<Linkedin size={14} />} label="LinkedIn" value={lead.linkedin_url} href={lead.linkedin_url || undefined} />
           </div>
-          {(lead.contact_name || lead.role) && (
-            <div className="rounded-xl border border-line bg-surface p-3.5">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-faint">Contact</div>
-              <div className="mt-1 font-bold text-ink">{lead.contact_name || '—'}</div>
-              {lead.role && <div className="text-[12.5px] text-dim">{lead.role}</div>}
+          <div className="rounded-xl border border-line bg-surface p-3.5">
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-faint">Primary contact</div>
+              <button onClick={() => setContact(true)} className="btn btn-ghost btn-sm !py-1"><PenLine size={12} /> Edit</button>
             </div>
-          )}
+            <div className={`mt-1 font-bold ${decisionMaker(lead) ? 'text-ink' : 'italic text-faint'}`}>{decisionMaker(lead) || 'No decision maker yet'}</div>
+            {leadData(lead).prev_emails?.length ? <div className="text-[11.5px] text-faint">Earlier addresses: {leadData(lead).prev_emails!.join(', ')}</div> : null}
+            {lastActionLabel(lead) && <div className="mt-1.5 text-[12px] text-dim">Last: {lastActionLabel(lead)}</div>}
+            {nextLabel(lead).text && <div className="mt-0.5 text-[12px] font-bold" style={{ color: nextLabel(lead).due === 'overdue' ? 'var(--red)' : nextLabel(lead).due === 'today' ? 'var(--amber)' : 'var(--dim)' }}>{nextLabel(lead).text}</div>}
+          </div>
           <div>
             <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-faint">Move in pipeline</div>
             <div className="flex flex-wrap gap-1.5">
-              {STAGES.map((s) => (
-                <button key={s.key} onClick={() => moveStage(s.key)}
-                  className={`rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition ${lead.stage === s.key ? 'border-accent bg-[var(--accent-soft)] text-accent' : 'border-line text-dim hover:border-line-2'}`}>
-                  {s.label}
-                </button>
-              ))}
+              {STAGES.map((s) => {
+                const active = stepOf(lead.stage).key === stepOf(s.key).key;
+                return (
+                  <button key={s.key} onClick={() => moveStage(s.key)}
+                    className={`rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition ${active ? 'border-accent bg-[var(--accent-soft)] text-accent' : 'border-line text-dim hover:border-line-2'}`}>
+                    {active && s.key === 'followup1' ? stageLabel(lead.stage) : s.label}
+                  </button>
+                );
+              })}
             </div>
+            <p className="hint mt-1.5">Follow-up attempts are counted automatically — log calls from the card and the next step schedules itself.</p>
           </div>
+          <PrimaryContactModal lead={lead} open={contact} onClose={() => setContact(false)} onDone={onChange} />
         </div>
       )}
 

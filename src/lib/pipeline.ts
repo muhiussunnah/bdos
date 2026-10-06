@@ -23,8 +23,8 @@ export interface PipelineStep {
 
 export const PIPELINE: PipelineStep[] = [
   { key: 'lead', n: 1, label: 'Lead', hint: 'Not contacted yet', emoji: '🔭', stages: ['new'], target: 'new', color: '#7C3AED' },
-  { key: 'contacted', n: 2, label: 'Contacted', hint: 'First call or email done', emoji: '✈️', stages: ['contacted'], target: 'contacted', color: '#2563EB' },
-  { key: 'followup', n: 3, label: 'Follow-up', hint: 'Next touch needed', emoji: '🕒', stages: ['followup1', 'followup2', 'followup3'], target: 'followup1', color: '#E08C1F' },
+  { key: 'contacted', n: 2, label: 'Outreach sent', hint: 'Emailed — now call or email again', emoji: '✈️', stages: ['contacted'], target: 'contacted', color: '#2563EB' },
+  { key: 'followup', n: 3, label: 'Follow-up', hint: 'We tried — next action is scheduled', emoji: '🕒', stages: ['followup1', 'followup2', 'followup3'], target: 'followup1', color: '#E08C1F' },
   { key: 'meeting', n: 4, label: 'Meeting booked', hint: 'In calendar', emoji: '📅', stages: ['meeting'], target: 'meeting', color: '#DB2777' },
   { key: 'deal', n: 5, label: 'Active deal', hint: 'Proposal sent', emoji: '📄', stages: ['positive'], target: 'positive', color: '#0891B2' },
   { key: 'won', n: 6, label: 'Won', hint: 'Agreement signed', emoji: '🎉', stages: ['closed'], target: 'closed', color: '#16A34A' },
@@ -46,10 +46,10 @@ export function stepOf(stage: string): PipelineStep {
 export function stageLabel(stage: string): string {
   switch (stage) {
     case 'new': return 'New';
-    case 'contacted': return 'Contacted';
-    case 'followup1': return 'Follow-up 1';
-    case 'followup2': return 'Follow-up 2';
-    case 'followup3': return 'Follow-up 3';
+    case 'contacted': return 'Outreach sent';
+    case 'followup1': return 'Follow-up · Attempt 1';
+    case 'followup2': return 'Follow-up · Attempt 2';
+    case 'followup3': return 'Follow-up · Attempt 3';
     case 'positive': return 'Active deal';
     case 'meeting': return 'Meeting booked';
     case 'closed': return 'Won';
