@@ -110,9 +110,13 @@ export function nextLabel(l: Lead, now = new Date()): { text: string; due: Due }
   const iso = l.next_action_at;
   const due = dueOf(iso, now);
   if (!iso || due === 'none') return { text: '', due: 'none' };
-  const verb = l.stage === 'contacted' || l.stage === 'new' || leadData(l).last_action ? 'Call' : 'Follow up';
+  const d = leadData(l);
+  const verb = l.stage === 'contacted' || l.stage === 'new' || d.last_action ? 'Call' : 'Follow up';
   const day = fmtDay(iso, now);
-  const withTime = new Date(iso).getHours() !== 9 || new Date(iso).getMinutes() !== 0 ? ` ${new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
+  // only show a clock time when the salesperson picked one (automated sequences carry arbitrary times)
+  const chosen = d.last_action?.next_at === iso;
+  const t = new Date(iso);
+  const withTime = chosen && (t.getHours() !== 9 || t.getMinutes() !== 0) ? ` ${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
   return { text: `${due === 'overdue' ? 'OVERDUE' : 'NEXT'}: ${verb} ${day}${withTime}`, due };
 }
 

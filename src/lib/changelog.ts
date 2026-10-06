@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.3',
+    date: '2026-10-06',
+    title: 'Cleaner NEXT dates',
+    tag: 'fix',
+    notes: [
+      'The NEXT / OVERDUE line shows just the day ("Call 8 Oct") unless the salesperson picked a specific time. Automated follow-up sequences no longer show odd clock times like 11:57 PM.',
+    ],
+  },
+  {
     version: '1.2.2',
     date: '2026-10-06',
     title: 'Call → result → next step: the salesperson workflow',
