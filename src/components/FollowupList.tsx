@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Repeat, Loader2, Sparkles, Phone, Mail, Check, ClipboardList, AlertCircle, Clock, CalendarDays, ListFilter } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Avatar } from '@/components/ui';
+import { usePager, Pagination } from '@/components/listing';
 import { ThreeDot, type MenuItem } from '@/components/Menu';
 import { OwnerBadge, useLeadLog } from '@/components/sales/CallFlow';
 import { stageLabel } from '@/lib/pipeline';
@@ -43,6 +44,9 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
     });
   }, [filtered, bucket]); // eslint-disable-line react-hooks/exhaustive-deps
   const due = filtered.filter((l) => l.next_action_at && new Date(l.next_action_at).getTime() <= now.getTime());
+  // page the queue like Outreach: 10 / 25 / 50 / 100 per page, remembered per list
+  const pager = usePager(visible, 'followups', 25);
+  useEffect(() => { pager.reset(); }, [q, bucket, leads.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runAll() {
     if (!project) return; setRunning(true);
@@ -86,10 +90,11 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
           sub={bucket === 'overdue' ? 'Nothing slipped — nice.' : 'Leads you have tried get a scheduled next action and show up here.'} /></Card>
       ) : (
         <Card className="!p-0">
-          {visible.map((l, i) => (
+          {pager.slice.map((l, i) => (
             <FollowupRow key={l.id} lead={l} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange} onCall={() => log.startCall(l)}
               menu={[...log.items(l, true), ...(menuFor ? menuFor(l.id) : [])]} />
           ))}
+          <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="leads" />
         </Card>
       )}
       {log.modals}

@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.6',
+    date: '2026-10-07',
+    title: 'Follow-up queue in pages',
+    tag: 'improvement',
+    notes: [
+      'The Follow-up list (Follow-ups page and the inbox Follow-up stage) is paged like Outreach: choose 10, 25, 50 or 100 per page and jump with Prev / 1 2 3 / Next instead of scrolling through hundreds of rows. Your page size is remembered.',
+    ],
+  },
+  {
     version: '1.2.5',
     date: '2026-10-07',
     title: 'Log notes, calls and emails from every view',
