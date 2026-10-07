@@ -1,5 +1,6 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { resolveEmail, sendEmail, textToHtml } from '@/lib/email/resend';
+import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
 import type { Lead } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -42,6 +43,9 @@ export async function POST(req: Request) {
   }
 
   await supabase.from('messages').update({ handled: true }).eq('id', messageId);
-  await logActivity(supabase, userId, inbound.project_id, 'inbox', `Replied to ${(lead as Lead)?.company_name || to}`);
-  return ok({ sent: true });
+  // answering moves an Outreach-sent / Follow-up lead forward with the next action one week out
+  let moved: { next_action_at: string | null; stage: string } | null = null;
+  if (lead) moved = await touchLeadAfterEmail(supabase, lead as Lead, { subject, by: senderName(from) }).catch(() => null);
+  await logActivity(supabase, userId, inbound.project_id, 'inbox', `Replied to ${(lead as Lead)?.company_name || to}`, { leadId: inbound.lead_id, next_action_at: moved?.next_action_at || null });
+  return ok({ sent: true, ...(moved || {}) });
 }

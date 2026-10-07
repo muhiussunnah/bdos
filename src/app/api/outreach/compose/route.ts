@@ -1,4 +1,5 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
+import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
 import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, parseAddressList, wrapEmailHtml, htmlToText } from '@/lib/email/resend';
 import { isEmail } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
@@ -90,20 +91,10 @@ export async function POST(req: Request) {
 
   await supabase.from('messages').insert({ ...base, status: 'sent', provider_message_id: providerId, sent_at: new Date().toISOString() });
 
-  if (lead) {
-    const now = new Date().toISOString();
-    const patch: Record<string, unknown> = { last_contacted_at: now, updated_at: now };
-    // A successful send always takes a New lead to Contacted (so it leaves the
-    // "New" list); the follow-up sequence is only scheduled when asked for.
-    if (lead.stage === 'new') {
-      const days = P.follow_up_days?.length ? P.follow_up_days : [3, 7, 21];
-      patch.stage = 'contacted';
-      patch.followup_step = 0;
-      patch.next_action_at = startFollowups ? new Date(Date.now() + days[0] * 86400000).toISOString() : null;
-    }
-    await supabase.from('leads').update(patch).eq('id', lead.id);
-  }
+  // New → Outreach sent; queue leads → Follow-up with the next action one week out
+  let moved: { next_action_at: string | null; stage: string } | null = null;
+  if (lead) moved = await touchLeadAfterEmail(supabase, lead, { subject, by: senderName(from), startFollowups, followUpDays: P.follow_up_days });
 
-  await logActivity(supabase, userId, projectId, 'outreach', `Sent a manual email to ${lead?.company_name || to[0]}`, { leadId: lead?.id, manual: true });
-  return ok({ sent: true, provider_message_id: providerId, leadId: lead?.id || null });
+  await logActivity(supabase, userId, projectId, 'outreach', `Sent a manual email to ${lead?.company_name || to[0]}`, { leadId: lead?.id, manual: true, next_action_at: moved?.next_action_at || null });
+  return ok({ sent: true, provider_message_id: providerId, leadId: lead?.id || null, ...(moved || {}) });
 }

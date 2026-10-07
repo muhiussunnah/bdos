@@ -1,4 +1,5 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
+import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
 import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText, parseAddressList } from '@/lib/email/resend';
 import { isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
@@ -106,18 +107,9 @@ export async function POST(req: Request) {
         status: scheduled ? 'scheduled' : 'sent', sent_at: scheduled ? null : whenIso, scheduled_at: scheduled ? whenIso : null,
       });
       if (scheduled) scheduledCount++;
-      if (lead) {
-        const now = new Date().toISOString();
-        // a drip-fed lead counts as contacted at the moment its email actually goes out
-        const patch: Record<string, unknown> = { last_contacted_at: whenIso, updated_at: now };
-        // A successful send always takes a New lead to Contacted (so it leaves the
-        // "New" list); the follow-up sequence is only scheduled when asked for.
-        if (lead.stage === 'new') {
-          patch.stage = 'contacted'; patch.followup_step = 0;
-          patch.next_action_at = startFollowups ? new Date((scheduled?.getTime() || Date.now()) + days[0] * 86400000).toISOString() : null;
-        }
-        await supabase.from('leads').update(patch).eq('id', lead.id);
-      }
+      // a drip-fed lead counts as contacted at the moment its email actually goes out;
+      // New → Outreach sent, queue leads → Follow-up with the next action one week out
+      if (lead) await touchLeadAfterEmail(supabase, lead, { at: whenIso, subject: subj, by: senderName(from), startFollowups, followUpDays: days });
       results.push({ email, ok: true });
     } catch (e) {
       await supabase.from('messages').insert({ ...base, status: 'failed' });

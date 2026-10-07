@@ -27,6 +27,16 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.7',
+    date: '2026-10-07',
+    title: 'Sending an email moves the follow-up one week ahead',
+    tag: 'fix',
+    notes: [
+      'Emailing a lead that is in Outreach sent or Follow-up (from the Email button, Compose, a reply in the conversation, or Send to a list) now moves it to Follow-up with the next action set to one week later, counts the attempt, and re-dates its call task. The row shows "Last: ✉️ Email · today · subject" right away instead of staying Overdue.',
+      'New leads keep the old behaviour: first email → Outreach sent, with the agent\'s follow-up date only when you tick it.',
+    ],
+  },
+  {
     version: '1.2.6',
     date: '2026-10-07',
     title: 'Follow-up queue in pages',

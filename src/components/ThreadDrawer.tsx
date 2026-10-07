@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus } from 'lucide-react';
-import { useApp } from '@/components/providers/AppProvider';
 import { Drawer } from '@/components/ui';
-import { LinkLeadModal, useSalesperson, useLeadLog } from '@/components/sales/CallFlow';
-import { afterReply } from '@/lib/sales';
+import { LinkLeadModal, useLeadLog } from '@/components/sales/CallFlow';
 import { relTime } from '@/lib/utils';
 import { PIPELINE, stepOf, stageLabel } from '@/lib/pipeline';
 import type { Thread } from '@/lib/threads';
@@ -26,8 +24,6 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   onDelete?: (leadId: string) => void;
   onDeleteThread?: (threadKey: string) => void;
 }) {
-  const { supabase } = useApp();
-  const { by } = useSalesperson(thread?.lead || null);
   const log = useLeadLog(onChange);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -58,8 +54,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
         const res = await fetch('/api/outreach/compose', { method: 'POST', body: fd });
         const d = await res.json(); if (!res.ok) throw new Error(d.error);
       }
-      // answering an Outreach-sent lead moves it to Follow-up with the next touch planned
-      if (lead) await afterReply(supabase, lead, by).catch(() => undefined);
+      // the API moves an Outreach-sent / Follow-up lead forward (next action +7 days)
       toast.success('Reply sent'); setReply(''); onChange();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed'); }
     finally { setBusy(false); }

@@ -293,19 +293,6 @@ export async function applyCallResult(supabase: SupabaseClient, lead: Lead, inpu
     { by: input.by, result: input.result, note: note || null, nextAt: needsDate ? input.nextAt : null, attempt: attempts });
 }
 
-/** A reply was answered: an Outreach-sent / New lead becomes Follow-up with the next touch planned. */
-export async function afterReply(supabase: SupabaseClient, lead: Lead, by: string): Promise<void> {
-  if (lead.stage !== 'contacted' && lead.stage !== 'new') return;
-  const attempts = attemptsOf(lead) + 1;
-  const nextAt = addWorkingDays(new Date(), DEFAULT_NEXT_WORKING_DAYS).toISOString();
-  const data: LeadData = { ...leadData(lead), attempts };
-  const now = new Date().toISOString();
-  const { error } = await supabase.from('leads').update({ stage: followupStage(attempts), followup_step: Math.min(3, attempts), next_action_at: nextAt, last_contacted_at: now, data, updated_at: now }).eq('id', lead.id);
-  if (error) throw new Error(explain(error));
-  await syncCallTask(supabase, lead, nextAt, 'You replied — check back');
-  await log(supabase, lead, 'call', `${lead.company_name}: replied · follow-up ${fmtDay(nextAt)}`, { by, nextAt, attempt: attempts, via: 'reply' });
-}
-
 /** Attach an unlinked conversation to a lead; the replier's address becomes the primary email. */
 export async function linkThreadToLead(supabase: SupabaseClient, messageIds: string[], counterpart: string, lead: Lead, by: string): Promise<void> {
   if (messageIds.length) {
