@@ -5,6 +5,8 @@ import { Building2, Search, Mail, Phone, Globe } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, StageTag, PriorityTag, Thinking } from '@/components/ui';
 import { usePager, Pagination } from '@/components/listing';
+import { ThreeDot } from '@/components/Menu';
+import { useLeadLog } from '@/components/sales/CallFlow';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportLeads } from '@/lib/export';
@@ -26,6 +28,7 @@ export default function CompaniesPage() {
     setLoading(false);
   }, [project, supabase]);
   useEffect(() => { load(); }, [load]);
+  const log = useLeadLog(load);
 
   const filtered = useMemo(() => leads.filter((l) =>
     inRange(l.created_at, bounds) &&
@@ -52,7 +55,7 @@ export default function CompaniesPage() {
         <Card className="!p-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
-              <thead><tr>{['Company', 'Contact', 'Phone', 'Email', 'Priority', 'Stage', 'Added'].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+              <thead><tr>{['Company', 'Contact', 'Phone', 'Email', 'Priority', 'Stage', 'Added', ''].map((h, i) => <th key={i} className="th">{h}</th>)}</tr></thead>
               <tbody>
                 {pager.slice.map((l) => (
                   <tr key={l.id} className="border-t border-line">
@@ -81,6 +84,7 @@ export default function CompaniesPage() {
                     <td className="td"><PriorityTag p={l.priority} /></td>
                     <td className="td"><StageTag stage={l.stage} /></td>
                     <td className="td whitespace-nowrap text-[12px] text-faint">{new Date(l.created_at).toLocaleDateString()}</td>
+                    <td className="td !pl-0"><ThreeDot items={log.items(l)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -89,6 +93,7 @@ export default function CompaniesPage() {
           <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="companies" />
         </Card>
       )}
+      {log.modals}
     </div>
   );
 }

@@ -1,8 +1,21 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { stageLabel } from '@/lib/pipeline';
+
+/**
+ * Overlays render in a portal on <body>. Inside a card or row that is animated /
+ * transformed, `position: fixed` would otherwise be measured against that card
+ * and the dialog ends up clipped behind its neighbours.
+ */
+function usePortalRoot(): HTMLElement | null {
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setRoot(document.body); }, []);
+  return root;
+}
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return <div className={cn('card', className)}>{children}</div>;
@@ -94,7 +107,9 @@ export function Drawer({ open, onClose, title, sub, children, footer }: {
   open: boolean; onClose: () => void; title: string; sub?: string;
   children: React.ReactNode; footer?: React.ReactNode;
 }) {
-  return (
+  const root = usePortalRoot();
+  if (!root) return null;
+  return createPortal(
     <>
       <div className={cn('fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm transition', open ? 'opacity-100' : 'pointer-events-none opacity-0')}
         onClick={onClose} />
@@ -110,15 +125,17 @@ export function Drawer({ open, onClose, title, sub, children, footer }: {
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
         {footer && <div className="border-t border-line bg-surface px-6 py-4">{footer}</div>}
       </div>
-    </>
+    </>,
+    root,
   );
 }
 
 export function Modal({ open, onClose, title, children, wide }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean;
 }) {
-  if (!open) return null;
-  return (
+  const root = usePortalRoot();
+  if (!open || !root) return null;
+  return createPortal(
     <>
       <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className={cn('fixed left-1/2 top-1/2 z-[101] max-h-[90vh] w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[20px] bg-surface p-6 shadow-pop',
@@ -129,6 +146,7 @@ export function Modal({ open, onClose, title, children, wide }: {
         </div>
         {children}
       </div>
-    </>
+    </>,
+    root,
   );
 }

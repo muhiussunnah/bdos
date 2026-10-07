@@ -2,30 +2,45 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine } from 'lucide-react';
+import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine, StickyNote, MailPlus, History as HistoryIcon, UserRound, ClipboardList } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { useDialogs } from '@/components/providers/DialogProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
 import { ComposeModal } from '@/components/ComposeModal';
 import { STAGES } from '@/lib/utils';
 import { stageLabel, stepOf } from '@/lib/pipeline';
-import { PrimaryContactModal } from '@/components/sales/CallFlow';
+import { PrimaryContactModal, useLeadLog } from '@/components/sales/CallFlow';
 import { decisionMaker, leadData, lastActionLabel, nextLabel } from '@/lib/sales';
 import type { Lead } from '@/lib/types';
 
 type Prep = { summary: string; what_they_do: string; why_relevant: string; talking_points: string[]; objections: string[]; next_steps: string[] };
+type ActivityRow = { id: string; kind: string; message: string; meta: Record<string, unknown>; created_at: string };
+
+const KIND_ICON: Record<string, React.ReactNode> = {
+  call: <Phone size={13} />, note: <StickyNote size={13} />, email: <MailPlus size={13} />, contact: <UserRound size={13} />,
+  owner: <UserRound size={13} />, outreach: <Send size={13} />, inbox: <Mail size={13} />,
+};
 
 export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onClose: () => void; onChange: () => void }) {
   const { supabase } = useApp();
   const { confirm } = useDialogs();
-  const [tab, setTab] = useState<'overview' | 'outreach' | 'prep'>('overview');
+  const log = useLeadLog(onChange);
+  const [tab, setTab] = useState<'overview' | 'outreach' | 'prep' | 'history'>('overview');
   const [draft, setDraft] = useState<{ subject: string; body: string; step: number } | null>(null);
   const [prep, setPrep] = useState<Prep | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [compose, setCompose] = useState(false);
   const [contact, setContact] = useState(false);
+  const [history, setHistory] = useState<ActivityRow[] | null>(null);
 
-  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); setCompose(false); setContact(false); }, [lead?.id]);
+  useEffect(() => { setTab('overview'); setDraft(null); setPrep(null); setCompose(false); setContact(false); setHistory(null); }, [lead?.id]);
+  useEffect(() => {
+    if (!lead || tab !== 'history') return;
+    let alive = true;
+    supabase.from('activity_log').select('id,kind,message,meta,created_at').contains('meta', { leadId: lead.id }).order('created_at', { ascending: false }).limit(80)
+      .then(({ data }) => { if (alive) setHistory((data as ActivityRow[]) || []); });
+    return () => { alive = false; };
+  }, [lead, tab, supabase, lead?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!lead) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;
 
@@ -95,6 +110,14 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
     <Drawer open={!!lead} onClose={onClose} title={lead.company_name}
       sub={[lead.industry, lead.location].filter(Boolean).join(' · ')}
       footer={
+        <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-faint">Log</span>
+          <button onClick={() => log.startCall(lead)} className="btn btn-sm text-white" style={{ background: 'var(--green)' }}><Phone size={13} /> Call</button>
+          <button onClick={() => log.openResult(lead)} className="btn btn-ghost btn-sm"><ClipboardList size={13} /> Call result</button>
+          <button onClick={() => log.openNote(lead)} className="btn btn-ghost btn-sm"><StickyNote size={13} /> Note</button>
+          <button onClick={() => log.openEmail(lead)} className="btn btn-ghost btn-sm"><MailPlus size={13} /> Email</button>
+        </div>
         <div className="flex gap-2">
           <button onClick={generate} disabled={!!busy} className="btn btn-accent flex-1 justify-center">
             {busy === 'gen' ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Write outreach
@@ -103,6 +126,7 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
             <CalendarClock size={15} /> Meeting prep
           </button>
           <button onClick={del} className="btn btn-ghost !px-3 text-bad"><Trash2 size={15} /></button>
+        </div>
         </div>
       }>
       <div className="mb-4 flex items-center gap-2">
@@ -114,7 +138,7 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
       </div>
 
       <div className="mb-4 inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
-        {(['overview', 'outreach', 'prep'] as const).map((t) => (
+        {(['overview', 'outreach', 'prep', 'history'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-lg px-3 py-1.5 text-[12.5px] font-bold capitalize transition ${tab === t ? 'bg-ink text-bg' : 'text-dim'}`}>
             {t === 'prep' ? 'Meeting prep' : t}
@@ -210,6 +234,22 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
           )}
         </div>
       )}
+      {tab === 'history' && (
+        <div className="space-y-1">
+          {history === null ? <Thinking label="Loading history…" /> : history.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-faint">Nothing logged yet. Calls, notes, emails and contact changes will show up here.</p>
+          ) : history.map((a) => (
+            <div key={a.id} className="flex items-start gap-3 border-t border-line py-2.5 first:border-t-0">
+              <span className="grid h-7 w-7 flex-none place-items-center rounded-lg" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{KIND_ICON[a.kind] || <HistoryIcon size={13} />}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] text-ink">{a.message.replace(new RegExp(`^${lead.company_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*`), '')}</div>
+                <div className="text-[11px] text-faint">{new Date(a.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{typeof a.meta?.by === 'string' ? ` · ${a.meta.by}` : ''}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {log.modals}
     </Drawer>
   );
 }

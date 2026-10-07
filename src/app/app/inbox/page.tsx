@@ -17,6 +17,8 @@ import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { ThreeDot } from '@/components/Menu';
 import { LeadFront } from '@/components/sales/LeadFront';
+import { useLeadLog } from '@/components/sales/CallFlow';
+import { LeadPicker } from '@/components/LeadPicker';
 import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_SENDERS } from '@/components/SenderFilter';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
@@ -87,6 +89,7 @@ export default function InboxPage() {
     setLoading(false);
   }, [project, supabase, user.id]);
   useEffect(() => { load(); }, [load]);
+  const log = useLeadLog(() => { load(); refreshCounts(); });
 
   const leadById = useMemo(() => { const map: Record<string, Lead> = {}; leads.forEach((l) => (map[l.id] = l)); return map; }, [leads]);
   // account filter: only mail sent from / received at the chosen address
@@ -135,6 +138,7 @@ export default function InboxPage() {
     return [
       ...(threadK ? [{ label: 'Open conversation', icon: <MessagesSquare size={14} />, run: () => setThreadKey(threadK) }] : []),
       ...(lead?.email ? [{ label: 'Write email', icon: <PenLine size={14} />, run: () => setComposeLead(lead) }] : []),
+      ...(lead ? log.items(lead) : []),
       ...PIPELINE.filter((p) => p.key !== 'lead' && p.key !== current).map((p) => ({
         label: `Mark as ${p.label.toLowerCase()}`, icon: STEP_ICON[p.key], run: () => moveLead(leadId, p.target),
       })),
@@ -257,6 +261,7 @@ export default function InboxPage() {
       <LeadDrawer lead={drawerLead} onClose={() => setDrawerLead(null)} onChange={refresh} />
       <ComposeModal open={!!composeLead} lead={composeLead} onClose={() => setComposeLead(null)} onSent={refresh} />
       {logOpen && <LogReplyModal projectId={project.id} leads={leads} onClose={() => setLogOpen(false)} onDone={() => { pickStage('waiting'); refresh(); }} />}
+      {log.modals}
     </div>
   );
 }
@@ -388,7 +393,7 @@ function LogReplyModal({ projectId, leads, onClose, onDone }: { projectId: strin
     <Modal open onClose={onClose} title="Log an incoming reply">
       <p className="mb-3 text-[12.5px] text-dim">If a reply landed in another mailbox, paste it here so it joins the conversation under &ldquo;Waiting for answer&rdquo;.</p>
       <div className="field"><label>From lead (optional)</label>
-        <select className="input" value={leadId} onChange={(e) => setLeadId(e.target.value)}><option value="">— unlinked —</option>{options.map((l) => <option key={l.id} value={l.id}>{l.company_name}{l.email ? ` · ${l.email}` : ''}</option>)}</select></div>
+        <LeadPicker leads={options} value={leadId} onChange={setLeadId} placeholder="Search company, contact or email — e.g. sunlight" /></div>
       <div className="field"><label>Reply text</label><textarea className="input min-h-[160px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the email reply you received…" /></div>
       <div className="flex justify-end gap-2"><button onClick={onClose} className="btn btn-ghost">Cancel</button><button onClick={submit} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Log &amp; classify</button></div>
     </Modal>

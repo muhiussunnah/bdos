@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Repeat, Loader2, Sparkles, Phone, Mail, Check, CalendarClock, ClipboardList, PenLine, AlertCircle, Clock, CalendarDays, ListFilter } from 'lucide-react';
+import { Repeat, Loader2, Sparkles, Phone, Mail, Check, ClipboardList, AlertCircle, Clock, CalendarDays, ListFilter } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Avatar } from '@/components/ui';
 import { ThreeDot, type MenuItem } from '@/components/Menu';
-import { CallResultModal, PrimaryContactModal, RescheduleModal, OwnerBadge, useSalesperson } from '@/components/sales/CallFlow';
+import { OwnerBadge, useLeadLog } from '@/components/sales/CallFlow';
 import { stageLabel } from '@/lib/pipeline';
-import { decisionMaker, nextLabel, lastActionLabel, callState, logCallStart, dueOf, leadData, DUE_COLOR, DUE_SOFT, type Due } from '@/lib/sales';
+import { decisionMaker, nextLabel, lastActionLabel, callState, dueOf, leadData, DUE_COLOR, DUE_SOFT, type Due } from '@/lib/sales';
 import type { Lead } from '@/lib/types';
 
 type Bucket = 'all' | 'overdue' | 'today' | 'upcoming';
@@ -23,11 +23,9 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
   menuFor?: (leadId: string) => MenuItem[];
 }) {
   const { project } = useApp();
+  const log = useLeadLog(onChange);
   const [running, setRunning] = useState(false);
   const [bucket, setBucket] = useState<Bucket>('all');
-  const [resultFor, setResultFor] = useState<Lead | null>(null);
-  const [contactFor, setContactFor] = useState<Lead | null>(null);
-  const [dateFor, setDateFor] = useState<Lead | null>(null);
   const now = new Date();
 
   const filtered = useMemo(() => leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''} ${l.role || ''}`.toLowerCase().includes(q.toLowerCase())), [leads, q]);
@@ -70,7 +68,7 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
           <button key={c.key} onClick={() => setBucket(c.key)}
             className={`inline-flex items-center gap-1.5 rounded-[11px] border px-3 py-1.5 text-[12.5px] font-bold transition ${bucket === c.key ? 'border-accent bg-[var(--accent-soft)] text-ink' : 'border-line bg-surface text-dim hover:border-line-2'}`}>
             <span style={{ color: c.color }}>{c.icon}</span>{c.label}
-            <span className="rounded-md px-1.5 text-[11px]" style={{ background: c.key === 'all' ? 'var(--border)' : c.key === 'upcoming' ? 'var(--border)' : c.key === 'today' ? 'var(--amber-soft)' : 'var(--red-soft)', color: c.color }}>{c.count}</span>
+            <span className="rounded-md px-1.5 text-[11px]" style={{ background: c.key === 'today' ? 'var(--amber-soft)' : c.key === 'overdue' ? 'var(--red-soft)' : 'var(--border)', color: c.color }}>{c.count}</span>
           </button>
         ))}
         {showRunAll && (
@@ -89,32 +87,19 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
       ) : (
         <Card className="!p-0">
           {visible.map((l, i) => (
-            <FollowupRow key={l.id} lead={l} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange}
-              onResult={() => setResultFor(l)} onContact={() => setContactFor(l)} onDate={() => setDateFor(l)}
-              menu={[
-                { label: 'Log a call result', icon: <ClipboardList size={14} />, run: () => setResultFor(l) },
-                { label: 'Change next date', icon: <CalendarClock size={14} />, run: () => setDateFor(l) },
-                { label: 'Edit primary contact', icon: <PenLine size={14} />, run: () => setContactFor(l) },
-                ...(menuFor ? menuFor(l.id) : []),
-              ]} />
+            <FollowupRow key={l.id} lead={l} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange} onCall={() => log.startCall(l)}
+              menu={[...log.items(l, true), ...(menuFor ? menuFor(l.id) : [])]} />
           ))}
         </Card>
       )}
-
-      <CallResultModal lead={resultFor} open={!!resultFor} onClose={() => setResultFor(null)} onDone={onChange} />
-      <PrimaryContactModal lead={contactFor} open={!!contactFor} onClose={() => setContactFor(null)} onDone={onChange} />
-      <RescheduleModal lead={dateFor} open={!!dateFor} onClose={() => setDateFor(null)} onDone={onChange} />
+      {log.modals}
     </div>
   );
 }
 
-function FollowupRow({ lead, index, onOpen, onWrite, onChange, onResult, menu }: {
-  lead: Lead; index: number; onOpen: (l: Lead) => void; onWrite: (l: Lead) => void; onChange: () => void;
-  onResult: () => void; onContact: () => void; onDate: () => void; menu: MenuItem[];
+function FollowupRow({ lead, index, onOpen, onWrite, onChange, onCall, menu }: {
+  lead: Lead; index: number; onOpen: (l: Lead) => void; onWrite: (l: Lead) => void; onChange: () => void; onCall: () => void; menu: MenuItem[];
 }) {
-  const { supabase } = useApp();
-  const { by } = useSalesperson(lead);
-  const [calling, setCalling] = useState(false);
   const dm = decisionMaker(lead);
   const next = nextLabel(lead);
   const last = lastActionLabel(lead);
@@ -123,14 +108,6 @@ function FollowupRow({ lead, index, onOpen, onWrite, onChange, onResult, menu }:
   const tel = lead.phone ? lead.phone.replace(/[^\d+]/g, '') : '';
   const calledToday = d.last_action && new Date(d.last_action.at).toDateString() === new Date().toDateString();
   const bar = calledToday ? 'var(--green)' : next.due === 'none' ? 'var(--border)' : DUE_COLOR[next.due];
-
-  async function call() {
-    if (state === 'pending') { onResult(); return; }
-    setCalling(true);
-    try { await logCallStart(supabase, lead, by); if (tel) window.location.href = `tel:${tel}`; onChange(); onResult(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not log the call'); }
-    finally { setCalling(false); }
-  }
 
   return (
     <div className="reveal flex flex-wrap items-center gap-3 border-t border-line p-3.5 transition first:border-t-0 hover:bg-surface-2" style={{ animationDelay: `${Math.min(index, 12) * 30}ms`, boxShadow: `inset 4px 0 0 ${bar}` }}>
@@ -158,7 +135,7 @@ function FollowupRow({ lead, index, onOpen, onWrite, onChange, onResult, menu }:
 
       <OwnerBadge lead={lead} onChange={onChange} />
       <div className="flex items-center gap-1.5">
-        <button onClick={call} disabled={calling} title={lead.phone ? `Call ${lead.phone} and log it` : 'Log a call'}
+        <button onClick={onCall} title={lead.phone ? `Call ${lead.phone} and log it` : 'Log a call'}
           className={`btn btn-sm ${state === 'pending' ? 'btn-ghost !border-[var(--amber)] !bg-[var(--amber-soft)] !text-[var(--amber)]' : 'text-white'}`}
           style={state === 'pending' ? undefined : { background: 'var(--green)' }}>
           {state === 'pending' ? <ClipboardList size={13} /> : <Phone size={13} />} {state === 'pending' ? 'Log result' : 'Call'}

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2 } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Drawer } from '@/components/ui';
-import { LinkLeadModal, useSalesperson } from '@/components/sales/CallFlow';
+import { LinkLeadModal, useSalesperson, useLeadLog } from '@/components/sales/CallFlow';
 import { afterReply } from '@/lib/sales';
 import { relTime } from '@/lib/utils';
 import { PIPELINE, stepOf, stageLabel } from '@/lib/pipeline';
@@ -28,6 +28,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
 }) {
   const { supabase } = useApp();
   const { by } = useSalesperson(thread?.lead || null);
+  const log = useLeadLog(onChange);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState(false);
@@ -78,6 +79,14 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
                 : (onDeleteThread && <button onClick={() => onDeleteThread(thread.key)} title="Delete this conversation" className="btn btn-ghost btn-sm text-bad"><Trash2 size={14} /> Delete conversation</button>)}
             </div>
           </div>
+          {lead && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-faint">Log</span>
+              <button onClick={() => log.startCall(lead)} className="btn btn-ghost btn-sm"><Phone size={13} /> Call</button>
+              <button onClick={() => log.openNote(lead)} className="btn btn-ghost btn-sm"><StickyNote size={13} /> Note</button>
+              <button onClick={() => log.openEmail(lead)} className="btn btn-ghost btn-sm"><MailPlus size={13} /> Email outside Klientic</button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="mr-1 text-[11px] font-bold uppercase tracking-wide text-faint">Mark as</span>
             {MOVES.map((p) => {
@@ -138,6 +147,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
         })}
         <div ref={endRef} />
       </div>
+      {log.modals}
     </Drawer>
   );
 }

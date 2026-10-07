@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.5',
+    date: '2026-10-07',
+    title: 'Log notes, calls and emails from every view',
+    tag: 'feature',
+    notes: [
+      'Every three-dot menu — inbox rows and cards, follow-up rows, the leads table, companies, the lead drawer and the conversation drawer — now has Call, Log a note, Log an email and Edit primary contact. Notes are timestamped with who wrote them; logged emails (sent from Outlook, received by phone…) join the conversation history.',
+      'The lead drawer has a History tab: every note, call, email, contact change and owner change in order.',
+      'Fixed: the Primary contact and Call result popups opened inside the card, so the Save button could hide behind another card. All popups and drawers now open on top of the page.',
+      'Log a reply: pick the lead with a proper search (company, contact, email, website) instead of a long dropdown.',
+    ],
+  },
+  {
     version: '1.2.4',
     date: '2026-10-06',
     title: 'No more browser popups & a light-mode hero',

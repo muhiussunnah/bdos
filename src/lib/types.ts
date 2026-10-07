@@ -51,6 +51,8 @@ export interface LeadData {
   calls?: number;
   last_call?: { at: string; by: string };
   last_action?: { at: string; result: CallResult; note?: string; by: string; next_at?: string | null };
+  /** latest logged note or email (calls live in last_action) */
+  last_activity?: { at: string; kind: 'note' | 'email'; text: string; by: string };
 }
 
 export interface Lead {

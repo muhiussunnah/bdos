@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, Phone, X } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, Phone, X, ArrowRight } from 'lucide-react';
+import { ThreeDot } from '@/components/Menu';
+import { useLeadLog } from '@/components/sales/CallFlow';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, StageTag, Score, EmptyState, Modal, Thinking } from '@/components/ui';
 import { LeadDrawer } from '@/components/LeadDrawer';
@@ -59,6 +61,7 @@ function LeadsInner() {
   }, [project, supabase]);
 
   useEffect(() => { load(); }, [load]);
+  const log = useLeadLog(() => { load(); refreshCounts(); });
   useEffect(() => {
     const s = params.get('stage');
     if (isPipelineKey(s)) { setStageKey(s); setFilter('all'); }
@@ -233,11 +236,18 @@ function LeadsInner() {
                         </div>
                       </td>
                       <td className="td whitespace-nowrap text-[12px] text-faint">{new Date(l.created_at).toLocaleDateString()}</td>
-                      <td className="td !pl-0">
-                        <button onClick={(e) => { e.stopPropagation(); setConfirm({ ids: [l.id], label: l.company_name }); }}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-faint opacity-0 transition hover:bg-[var(--red-soft)] hover:text-bad group-hover:opacity-100 focus:opacity-100" aria-label={`Delete ${l.company_name}`}>
-                          <Trash2 size={15} />
-                        </button>
+                      <td className="td !pl-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center">
+                          <button onClick={(e) => { e.stopPropagation(); setConfirm({ ids: [l.id], label: l.company_name }); }}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-faint opacity-0 transition hover:bg-[var(--red-soft)] hover:text-bad group-hover:opacity-100 focus:opacity-100" aria-label={`Delete ${l.company_name}`}>
+                            <Trash2 size={15} />
+                          </button>
+                          <ThreeDot items={[
+                            { label: 'Open lead', icon: <ArrowRight size={14} />, run: () => setActive(l) },
+                            ...log.items(l),
+                            { label: 'Delete lead', icon: <Trash2 size={14} />, danger: true, run: () => setConfirm({ ids: [l.id], label: l.company_name }) },
+                          ]} />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -265,6 +275,7 @@ function LeadsInner() {
       <ManualModal open={manualOpen} onClose={() => setManualOpen(false)} onDone={load} />
       <ImportLeadsModal open={importOpen} onClose={() => setImportOpen(false)} onDone={load} />
       <LeadDrawer lead={active} onClose={() => setActive(null)} onChange={() => { load(); refreshCounts(); }} />
+      {log.modals}
     </div>
   );
 }

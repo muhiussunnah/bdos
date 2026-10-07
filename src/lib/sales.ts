@@ -120,17 +120,64 @@ export function nextLabel(l: Lead, now = new Date()): { text: string; due: Due }
   return { text: `${due === 'overdue' ? 'OVERDUE' : 'NEXT'}: ${verb} ${day}${withTime}`, due };
 }
 
-/** "Called 2 Oct · Got Anna's email" */
+/** "📞 Call again · 2 Oct · “Got Anna's email” · Allan" — whatever happened most recently. */
 export function lastActionLabel(l: Lead): string | null {
   const d = leadData(l);
-  const a = d.last_action;
-  if (a) {
-    const when = new Date(a.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    return `${RESULT_EMOJI[a.result]} ${RESULT_LABEL[a.result]} · ${when}${a.note ? ` · “${a.note}”` : ''}${a.by ? ` · ${a.by}` : ''}`;
+  const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const candidates: { at: string; text: string }[] = [];
+  if (d.last_action) {
+    const a = d.last_action;
+    candidates.push({ at: a.at, text: `${RESULT_EMOJI[a.result]} ${RESULT_LABEL[a.result]} · ${day(a.at)}${a.note ? ` · “${a.note}”` : ''}${a.by ? ` · ${a.by}` : ''}` });
   }
-  if (d.last_call) return `📞 Called ${new Date(d.last_call.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · result not logged`;
-  if (l.last_contacted_at) return `✉️ Email sent ${new Date(l.last_contacted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
-  return null;
+  if (d.last_activity) {
+    const a = d.last_activity;
+    candidates.push({ at: a.at, text: `${a.kind === 'note' ? '📝' : '✉️'} ${a.kind === 'note' ? 'Note' : 'Email'} · ${day(a.at)} · “${a.text}”${a.by ? ` · ${a.by}` : ''}` });
+  }
+  if (d.last_call && (!d.last_action || d.last_call.at > d.last_action.at)) candidates.push({ at: d.last_call.at, text: `📞 Called ${day(d.last_call.at)} · result not logged` });
+  if (l.last_contacted_at) candidates.push({ at: l.last_contacted_at, text: `✉️ Email sent ${day(l.last_contacted_at)}` });
+  if (!candidates.length) return null;
+  return candidates.sort((a, b) => b.at.localeCompare(a.at))[0].text;
+}
+
+/** A short timestamped note on the lead (shows as "Last: 📝 Note · 7 Oct · “…”" and in the history). */
+export async function logNote(supabase: SupabaseClient, lead: Lead, text: string, by: string): Promise<void> {
+  const clean = text.trim().slice(0, 300);
+  if (!clean) throw new Error('Write a short note');
+  const at = new Date().toISOString();
+  const data: LeadData = { ...leadData(lead), last_activity: { at, kind: 'note', text: clean, by } };
+  const { error } = await supabase.from('leads').update({ data, updated_at: at }).eq('id', lead.id);
+  if (error) throw new Error(explain(error));
+  await log(supabase, lead, 'note', `${lead.company_name}: ${clean}`, { by, text: clean, at });
+}
+
+export interface LoggedEmail { direction: 'outbound' | 'inbound'; subject: string; note?: string; at?: string }
+
+/**
+ * Record an email that happened outside Klientic (sent from Outlook, received on the phone…).
+ * It joins the conversation history as a manual message, so counts and threads stay honest.
+ */
+export async function logEmail(supabase: SupabaseClient, lead: Lead, e: LoggedEmail, by: string): Promise<void> {
+  const subject = e.subject.trim().slice(0, 200);
+  if (!subject) throw new Error('Add the subject (or a few words about the email)');
+  const at = e.at || new Date().toISOString();
+  const note = e.note?.trim().slice(0, 1000) || '';
+  const { error: mErr } = await supabase.from('messages').insert({
+    lead_id: lead.id, project_id: lead.project_id, owner_id: lead.owner_id, direction: e.direction,
+    subject, body: note || subject, status: e.direction === 'outbound' ? 'sent' : 'received',
+    to_email: e.direction === 'outbound' ? lead.email : null, from_email: e.direction === 'inbound' ? lead.email : null,
+    sent_at: at, handled: true, ai_meta: { manual: true, logged: true, by },
+  });
+  if (mErr) throw new Error(mErr.message);
+  const now = new Date().toISOString();
+  const data: LeadData = { ...leadData(lead), last_activity: { at, kind: 'email', text: subject, by } };
+  const patch: Record<string, unknown> = { data, updated_at: now };
+  if (e.direction === 'outbound') {
+    patch.last_contacted_at = at;
+    if (lead.stage === 'new') { patch.stage = 'contacted'; patch.followup_step = 0; }
+  }
+  const { error } = await supabase.from('leads').update(patch).eq('id', lead.id);
+  if (error) throw new Error(explain(error));
+  await log(supabase, lead, 'email', `${lead.company_name}: ${e.direction === 'outbound' ? 'email sent' : 'email received'} — ${subject}`, { by, direction: e.direction, subject, at });
 }
 
 /** Call-button state for the card. */

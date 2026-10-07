@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Phone, Save, UserRound, CalendarClock, Link2, Search } from 'lucide-react';
+import { Loader2, Phone, Save, UserRound, CalendarClock, Link2, Search, StickyNote, MailPlus, ClipboardList, PenLine, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
-import { AnchoredMenu } from '@/components/Menu';
+import { AnchoredMenu, type MenuItem } from '@/components/Menu';
 import { sendersFrom, type SenderIdentity } from '@/lib/email/resend';
 import {
   CALL_RESULTS, DEFAULT_NEXT_WORKING_DAYS, addWorkingDays, toDateInput, toTimeInput, fromDateInputs,
   applyCallResult, setPrimaryContact, setOwner, rescheduleNext, linkThreadToLead, leadData, ownerOf, initialsOf,
+  logNote, logEmail, logCallStart, callState,
 } from '@/lib/sales';
 import type { Lead, CallResult } from '@/lib/types';
 
@@ -294,4 +295,136 @@ export function LinkLeadModal({ open, onClose, onDone, projectId, messageIds, co
       </div>
     </Modal>
   );
+}
+
+/* ── log a note ────────────────────────────────────────────────────────────── */
+
+export function LogNoteModal({ lead, open, onClose, onDone }: { lead: Lead | null; open: boolean; onClose: () => void; onDone: () => void }) {
+  const { supabase } = useApp();
+  const { by } = useSalesperson(lead);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) setText(''); }, [open, lead]);
+  if (!lead) return null;
+  async function save() {
+    if (!lead) return;
+    setBusy(true);
+    try { await logNote(supabase, lead, text, by); toast.success('Note saved'); onDone(); onClose(); }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); }
+    finally { setBusy(false); }
+  }
+  const stamp = `${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${by}`;
+  return (
+    <Modal open={open} onClose={busy ? () => {} : onClose} title={`Note · ${lead.company_name}`}>
+      <textarea className="input min-h-[96px]" autoFocus maxLength={300} value={text} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') save(); }}
+        placeholder="Short note — e.g. Reception says Anna is back Monday." />
+      <div className="mt-1 flex items-center justify-between text-[11.5px] text-faint"><span><StickyNote size={11} className="mr-1 inline" />{stamp}</span><span>{text.length}/300 · Ctrl+Enter saves</span></div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} disabled={busy} className="btn btn-ghost">Cancel</button>
+        <button onClick={save} disabled={busy || !text.trim()} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save note</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── log an email that happened outside Klientic ───────────────────────────── */
+
+export function LogEmailModal({ lead, open, onClose, onDone }: { lead: Lead | null; open: boolean; onClose: () => void; onDone: () => void }) {
+  const { supabase } = useApp();
+  const { by } = useSalesperson(lead);
+  const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [subject, setSubject] = useState('');
+  const [note, setNote] = useState('');
+  const [when, setWhen] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const d = new Date(); d.setSeconds(0, 0);
+    setDirection('outbound'); setSubject(''); setNote(''); setWhen(`${toDateInput(d)}T${toTimeInput(d)}`);
+  }, [open, lead]);
+  if (!lead) return null;
+  async function save() {
+    if (!lead) return;
+    setBusy(true);
+    try {
+      const at = when ? new Date(when).toISOString() : undefined;
+      await logEmail(supabase, lead, { direction, subject, note, at }, by);
+      toast.success(direction === 'outbound' ? 'Email logged — it is in the conversation history' : 'Reply logged — it is in the conversation history');
+      onDone(); onClose();
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Modal open={open} onClose={busy ? () => {} : onClose} title={`Log an email · ${lead.company_name}`}>
+      <p className="mb-3 text-[12.5px] text-dim">For email that happened outside Klientic — sent from Outlook, forwarded by a colleague, read on the phone. It joins the conversation history{lead.email ? ` with ${lead.email}` : ''}.</p>
+      <div className="mb-3 inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
+        {([['outbound', 'I sent them an email', <ArrowUpRight key="o" size={13} />], ['inbound', 'They emailed me', <ArrowDownLeft key="i" size={13} />]] as const).map(([k, label, icon]) => (
+          <button key={k} type="button" onClick={() => setDirection(k)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${direction === k ? 'bg-ink text-bg' : 'text-dim'}`}>{icon}{label}</button>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="field !mb-0"><label>Subject / what it was about *</label><input className="input" autoFocus value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Offer PDF + video, as discussed" /></div>
+        <div className="field !mb-0"><label>When</label><input type="datetime-local" className="input !w-auto" value={when} onChange={(e) => setWhen(e.target.value)} /></div>
+      </div>
+      <div className="field mt-3 !mb-0"><label>Short note (optional)</label><textarea className="input min-h-[72px]" value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} placeholder="Sent the 9-page offer. Asked for a call next week." /></div>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-[11.5px] text-faint">Logged by {by}</span>
+        <div className="flex gap-2">
+          <button onClick={onClose} disabled={busy} className="btn btn-ghost">Cancel</button>
+          <button onClick={save} disabled={busy || !subject.trim()} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <MailPlus size={15} />} Log email</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── one hook that gives every view the same actions ───────────────────────── */
+
+/**
+ * usage:  const log = useLeadLog(refresh);
+ *         <ThreeDot items={[...log.items(lead), …]} />   …   {log.modals}
+ * `items(lead)` = Call · Log a note · Log an email · Edit primary contact;
+ * `items(lead, true)` adds Log call result + Change next date (follow-up queue).
+ */
+export function useLeadLog(onChange: () => void) {
+  const { supabase } = useApp();
+  const { by: me, senders } = useSalesperson(null);
+  const [result, setResult] = useState<Lead | null>(null);
+  const [note, setNote] = useState<Lead | null>(null);
+  const [email, setEmail] = useState<Lead | null>(null);
+  const [contact, setContact] = useState<Lead | null>(null);
+  const [date, setDate] = useState<Lead | null>(null);
+
+  async function startCall(lead: Lead) {
+    if (callState(lead) === 'pending') { setResult(lead); return; } // last call still needs its result
+    const by = ownerOf(lead, senders)?.name || me;
+    try { await logCallStart(supabase, lead, by); }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not log the call'); return; }
+    const tel = lead.phone ? lead.phone.replace(/[^\d+]/g, '') : '';
+    if (tel) window.location.href = `tel:${tel}`;
+    onChange();
+    setResult(lead);
+  }
+
+  const items = (lead: Lead, full = false): MenuItem[] => [
+    { label: lead.phone ? `Call ${lead.phone}` : 'Log a call', icon: <Phone size={14} />, run: () => startCall(lead) },
+    ...(full ? [{ label: 'Log call result', icon: <ClipboardList size={14} />, run: () => setResult(lead) }] : []),
+    { label: 'Log a note', icon: <StickyNote size={14} />, run: () => setNote(lead) },
+    { label: 'Log an email', icon: <MailPlus size={14} />, run: () => setEmail(lead) },
+    { label: 'Edit primary contact', icon: <PenLine size={14} />, run: () => setContact(lead) },
+    ...(full ? [{ label: 'Change next date', icon: <CalendarClock size={14} />, run: () => setDate(lead) }] : []),
+  ];
+
+  const modals = (
+    <>
+      <CallResultModal lead={result} open={!!result} onClose={() => setResult(null)} onDone={onChange} />
+      <LogNoteModal lead={note} open={!!note} onClose={() => setNote(null)} onDone={onChange} />
+      <LogEmailModal lead={email} open={!!email} onClose={() => setEmail(null)} onDone={onChange} />
+      <PrimaryContactModal lead={contact} open={!!contact} onClose={() => setContact(null)} onDone={onChange} />
+      <RescheduleModal lead={date} open={!!date} onClose={() => setDate(null)} onDone={onChange} />
+    </>
+  );
+
+  return { items, modals, startCall, openResult: setResult, openNote: setNote, openEmail: setEmail, openContact: setContact, openDate: setDate };
 }
