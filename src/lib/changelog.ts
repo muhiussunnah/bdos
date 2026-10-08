@@ -27,6 +27,20 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.8',
+    date: '2026-10-08',
+    title: 'Book meetings in Klientic — Teams + Google Calendar',
+    tag: 'feature',
+    notes: [
+      'Book meeting on every lead: from the 📅 button on cards, any ⋯ menu, the conversation and lead drawers, or right after a call with "Meeting booked". Pick date, time and length; your Teams room link is filled in.',
+      'The lead gets a real calendar invitation (Gmail / Outlook show Accept · Decline) with a Join Teams button. A copy goes to your Google Calendar address so it appears in Google Calendar and on the iPhone. Reschedule sends an update, cancel removes it from their calendar.',
+      'Accepted / declined replies are picked up automatically and shown on the meeting.',
+      'Send booking link: one click emails your Google Calendar booking page so the lead picks a free time. Compose has a Booking link button and Send to a list a {{booking_link}} placeholder. If they book that way, log it with "Book meeting" and untick the invite.',
+      'New Meetings page: upcoming, past and cancelled meetings with Join, Add to Google Calendar and Reschedule. The dashboard shows the next meetings first, and a prep task lands in Today\'s tasks the day before.',
+      'Settings → Meetings: per salesperson booking link, Teams room link and Google Calendar address, plus time zone and default length.',
+    ],
+  },
+  {
     version: '1.2.7',
     date: '2026-10-07',
     title: 'Sending an email moves the follow-up one week ahead',

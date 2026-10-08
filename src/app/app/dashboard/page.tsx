@@ -2,7 +2,8 @@
 
 import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
+import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3, CalendarCheck } from 'lucide-react';
+import { meetingOf, isUpcoming, fmtShort, providerOf, PROVIDER_LABEL, RSVP_LABEL } from '@/lib/meetings';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, Thinking } from '@/components/ui';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
@@ -48,7 +49,10 @@ export default function DashboardPage() {
 
   // recommendations
   const toSend = leads.filter((l) => l.stage === 'new' && l.priority === 'A').slice(0, 3);
-  const toCall = leads.filter((l) => ['positive', 'meeting'].includes(l.stage)).slice(0, 3);
+  // next meetings (within a week) first; leads with a booked meeting are not "to call"
+  const meetings = leads.map((l) => ({ l, m: meetingOf(l) })).filter((x) => isUpcoming(x.m) && new Date(x.m!.at).getTime() - Date.now() < 7 * 86400000)
+    .sort((a, b) => a.m!.at.localeCompare(b.m!.at)).slice(0, 3);
+  const toCall = leads.filter((l) => ['positive', 'meeting'].includes(l.stage) && !isUpcoming(meetingOf(l))).slice(0, 3);
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   return (
@@ -109,7 +113,8 @@ export default function DashboardPage() {
         <Card>
           <div className="card-h"><h3 className="flex items-center gap-1.5"><Sparkles size={15} className="text-accent" /> Today&apos;s focus</h3></div>
           <div className="space-y-2">
-            {toSend.length === 0 && toCall.length === 0 && dueFollowups.length === 0 && (
+            {meetings.map(({ l, m }) => <Rec key={`m-${l.id}`} icon={<CalendarCheck size={14} />} tone="accent" title={`Meeting: ${l.company_name}`} desc={`${fmtShort(m!.at)} · ${m!.duration} min${m!.link ? ` · ${PROVIDER_LABEL[providerOf(m!.link)]}` : ''}${m!.rsvp ? ` · ${RSVP_LABEL[m!.rsvp]}` : ''}`} href="/app/meetings" />)}
+            {toSend.length === 0 && toCall.length === 0 && dueFollowups.length === 0 && meetings.length === 0 && (
               <p className="py-4 text-center text-[13px] text-faint">All clear. Find new leads to keep the engine running.</p>
             )}
             {toCall.map((l) => <Rec key={l.id} icon={<Phone size={14} />} tone="ok" title={`Call: ${l.company_name}`} desc="Positive reply — book a meeting before it cools." href="/app/leads?stage=deal" />)}

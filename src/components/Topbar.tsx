@@ -16,6 +16,7 @@ const SUBTITLES: Record<string, string> = {
   '/app/outreach': 'AI-written, human-sounding email',
   '/app/inbox': 'Your outreach pipeline, stage by stage',
   '/app/followups': 'Leads to nudge until they reply',
+  '/app/meetings': 'Booked meetings, invites and your booking page',
   '/app/changelog': "Everything new in Klientic",
   '/app/tasks': "The sales manager's daily call list",
   '/app/reports': 'Daily management report',

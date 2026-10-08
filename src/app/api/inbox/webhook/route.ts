@@ -4,7 +4,8 @@ import { getReceivedEmail, htmlToText, sendersFrom } from '@/lib/email/resend';
 import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { classifyPrompt } from '@/lib/ai/prompts';
-import type { Project, Lead, ReplyCategory } from '@/lib/types';
+import { rsvpFromSubject, RSVP_LABEL } from '@/lib/meetings';
+import type { Project, Lead, LeadData, ReplyCategory } from '@/lib/types';
 
 export const runtime = 'edge';
 
@@ -101,6 +102,17 @@ export async function POST(req: Request) {
     ai_meta: { source: 'resend', message_id: mail.message_id || event.data.message_id || null, attachments, headers_from: mail.headers?.from || null },
   }).select('id').single();
   if (error || !created) return NextResponse.json({ error: error?.message || 'insert failed' }, { status: 500 });
+
+  // calendar RSVP ("Accepted: …", "Avböjt: …") → note it on the meeting; not a reply to answer
+  const rsvp = rsvpFromSubject(subject);
+  const meeting = lead?.data && typeof lead.data === 'object' ? (lead.data as LeadData).meeting : undefined;
+  if (rsvp && lead && meeting) {
+    const now = new Date().toISOString();
+    await admin.from('leads').update({ data: { ...(lead.data as LeadData), meeting: { ...meeting, rsvp, updated_at: now } }, updated_at: now }).eq('id', lead.id);
+    await admin.from('messages').update({ handled: true, category: 'meeting_request', ai_meta: { source: 'resend', rsvp, attachments } }).eq('id', created.id);
+    await admin.from('activity_log').insert({ owner_id: owner, project_id: projectId, kind: 'meeting', message: `${lead.company_name}: ${RSVP_LABEL[rsvp].toLowerCase()} the meeting invitation`, meta: { leadId: lead.id, rsvp, auto: true } });
+    return NextResponse.json({ ok: true, messageId: created.id, leadId: lead.id, rsvp });
+  }
 
   if (lead) {
     await admin.from('leads').update({ next_action_at: null, updated_at: new Date().toISOString() }).eq('id', lead.id);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine, StickyNote, MailPlus, History as HistoryIcon, UserRound, ClipboardList } from 'lucide-react';
+import { Send, Sparkles, CalendarClock, Trash2, Mail, Phone, Globe, Linkedin, Loader2, ArrowRight, Copy, PenLine, StickyNote, MailPlus, History as HistoryIcon, UserRound, ClipboardList, CalendarPlus, CalendarCheck } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { useDialogs } from '@/components/providers/DialogProvider';
 import { Drawer, PriorityTag, StageTag, Score, Thinking } from '@/components/ui';
@@ -17,7 +17,7 @@ type Prep = { summary: string; what_they_do: string; why_relevant: string; talki
 type ActivityRow = { id: string; kind: string; message: string; meta: Record<string, unknown>; created_at: string };
 
 const KIND_ICON: Record<string, React.ReactNode> = {
-  call: <Phone size={13} />, note: <StickyNote size={13} />, email: <MailPlus size={13} />, contact: <UserRound size={13} />,
+  call: <Phone size={13} />, note: <StickyNote size={13} />, email: <MailPlus size={13} />, contact: <UserRound size={13} />, meeting: <CalendarCheck size={13} />,
   owner: <UserRound size={13} />, outreach: <Send size={13} />, inbox: <Mail size={13} />,
 };
 
@@ -117,6 +117,7 @@ export function LeadDrawer({ lead, onClose, onChange }: { lead: Lead | null; onC
           <button onClick={() => log.openResult(lead)} className="btn btn-ghost btn-sm"><ClipboardList size={13} /> Call result</button>
           <button onClick={() => log.openNote(lead)} className="btn btn-ghost btn-sm"><StickyNote size={13} /> Note</button>
           <button onClick={() => log.openEmail(lead)} className="btn btn-ghost btn-sm"><MailPlus size={13} /> Email</button>
+          <button onClick={() => log.openBook(lead)} className="btn btn-sm text-white" style={{ background: '#DB2777' }}><CalendarPlus size={13} /> Meeting</button>
         </div>
         <div className="flex gap-2">
           <button onClick={generate} disabled={!!busy} className="btn btn-accent flex-1 justify-center">

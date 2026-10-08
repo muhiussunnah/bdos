@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Phone, Save, UserRound, CalendarClock, Link2, Search, StickyNote, MailPlus, ClipboardList, PenLine, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Loader2, Phone, Save, UserRound, CalendarClock, Link2, Search, StickyNote, MailPlus, ClipboardList, PenLine, ArrowUpRight, ArrowDownLeft, CalendarPlus, CalendarCheck } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { AnchoredMenu, type MenuItem } from '@/components/Menu';
+import { ComposeModal } from '@/components/ComposeModal';
+import { BookMeetingModal } from '@/components/sales/Meeting';
 import { sendersFrom, type SenderIdentity } from '@/lib/email/resend';
+import { meetingFor, meetingOf, bookingLinkEmail, providerOf, PROVIDER_LABEL } from '@/lib/meetings';
 import {
   CALL_RESULTS, DEFAULT_NEXT_WORKING_DAYS, addWorkingDays, toDateInput, toTimeInput, fromDateInputs,
   applyCallResult, setPrimaryContact, setOwner, rescheduleNext, linkThreadToLead, leadData, ownerOf, initialsOf,
@@ -60,8 +63,10 @@ function DatePick({ date, time, onDate, onTime, required }: { date: string; time
  * After a call: pick the result, add a short note, and (when needed) the next date.
  * "Got contact details" also captures the decision maker right here.
  */
-export function CallResultModal({ lead, open, onClose, onDone, initialResult }: {
+export function CallResultModal({ lead, open, onClose, onDone, initialResult, onMeeting }: {
   lead: Lead | null; open: boolean; onClose: () => void; onDone: () => void; initialResult?: CallResult | null;
+  /** "Meeting booked" saved → open the booking dialog for date, time and invite */
+  onMeeting?: (lead: Lead) => void;
 }) {
   const { supabase } = useApp();
   const { by } = useSalesperson(lead);
@@ -98,6 +103,7 @@ export function CallResultModal({ lead, open, onClose, onDone, initialResult }: 
       await applyCallResult(supabase, current, { result, note, nextAt, by });
       toast.success(`${def.emoji} ${def.label}${nextAt ? ` · next ${new Date(nextAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`);
       onDone(); onClose();
+      if (result === 'meeting' && onMeeting) onMeeting({ ...current, stage: 'meeting' });
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); }
     finally { setBusy(false); }
   }
@@ -388,13 +394,29 @@ export function LogEmailModal({ lead, open, onClose, onDone }: { lead: Lead | nu
  * `items(lead, true)` adds Log call result + Change next date (follow-up queue).
  */
 export function useLeadLog(onChange: () => void) {
-  const { supabase } = useApp();
+  const { supabase, settings, project } = useApp();
   const { by: me, senders } = useSalesperson(null);
   const [result, setResult] = useState<Lead | null>(null);
   const [note, setNote] = useState<Lead | null>(null);
   const [email, setEmail] = useState<Lead | null>(null);
   const [contact, setContact] = useState<Lead | null>(null);
   const [date, setDate] = useState<Lead | null>(null);
+  const [book, setBook] = useState<Lead | null>(null);
+  const [bookingMail, setBookingMail] = useState<{ lead: Lead; subject: string; html: string; fromId: string | null } | null>(null);
+
+  /** Compose prefilled with the salesperson's booking-page link. */
+  function sendBookingLink(lead: Lead) {
+    const ownerId = leadData(lead).owner || null;
+    const cfg = meetingFor(settings?.data, senders, ownerId);
+    if (!cfg.bookingUrl) { toast.error('Add your booking page link in Settings → Meetings first'); return; }
+    if (!lead.email) { toast.error('This lead has no email address'); return; }
+    const sender = (ownerId && senders.find((s) => s.id === ownerId)) || senders.find((s) => s.isDefault) || senders[0];
+    const mail = bookingLinkEmail({
+      lang: (project?.outreach_language || 'en').slice(0, 2), firstName: lead.contact_name?.split(/\s+/)[0] || null,
+      link: cfg.bookingUrl, senderName: sender?.name || me, videoLabel: cfg.roomUrl ? PROVIDER_LABEL[providerOf(cfg.roomUrl)] : undefined,
+    });
+    setBookingMail({ lead, subject: mail.subject, html: mail.html, fromId: sender?.id || null });
+  }
 
   async function startCall(lead: Lead) {
     if (callState(lead) === 'pending') { setResult(lead); return; } // last call still needs its result
@@ -407,24 +429,33 @@ export function useLeadLog(onChange: () => void) {
     setResult(lead);
   }
 
-  const items = (lead: Lead, full = false): MenuItem[] => [
-    { label: lead.phone ? `Call ${lead.phone}` : 'Log a call', icon: <Phone size={14} />, run: () => startCall(lead) },
-    ...(full ? [{ label: 'Log call result', icon: <ClipboardList size={14} />, run: () => setResult(lead) }] : []),
-    { label: 'Log a note', icon: <StickyNote size={14} />, run: () => setNote(lead) },
-    { label: 'Log an email', icon: <MailPlus size={14} />, run: () => setEmail(lead) },
-    { label: 'Edit primary contact', icon: <PenLine size={14} />, run: () => setContact(lead) },
-    ...(full ? [{ label: 'Change next date', icon: <CalendarClock size={14} />, run: () => setDate(lead) }] : []),
-  ];
+  const items = (lead: Lead, full = false): MenuItem[] => {
+    const m = meetingOf(lead);
+    const booked = m && m.status === 'scheduled';
+    return [
+      { label: lead.phone ? `Call ${lead.phone}` : 'Log a call', icon: <Phone size={14} />, run: () => startCall(lead) },
+      ...(full ? [{ label: 'Log call result', icon: <ClipboardList size={14} />, run: () => setResult(lead) }] : []),
+      { label: booked ? 'Reschedule meeting' : 'Book meeting', icon: booked ? <CalendarCheck size={14} /> : <CalendarPlus size={14} />, run: () => setBook(lead) },
+      { label: 'Send booking link', icon: <Link2 size={14} />, run: () => sendBookingLink(lead) },
+      { label: 'Log a note', icon: <StickyNote size={14} />, run: () => setNote(lead) },
+      { label: 'Log an email', icon: <MailPlus size={14} />, run: () => setEmail(lead) },
+      { label: 'Edit primary contact', icon: <PenLine size={14} />, run: () => setContact(lead) },
+      ...(full ? [{ label: 'Change next date', icon: <CalendarClock size={14} />, run: () => setDate(lead) }] : []),
+    ];
+  };
 
   const modals = (
     <>
-      <CallResultModal lead={result} open={!!result} onClose={() => setResult(null)} onDone={onChange} />
+      <CallResultModal lead={result} open={!!result} onClose={() => setResult(null)} onDone={onChange} onMeeting={(l) => setBook(l)} />
       <LogNoteModal lead={note} open={!!note} onClose={() => setNote(null)} onDone={onChange} />
       <LogEmailModal lead={email} open={!!email} onClose={() => setEmail(null)} onDone={onChange} />
       <PrimaryContactModal lead={contact} open={!!contact} onClose={() => setContact(null)} onDone={onChange} />
       <RescheduleModal lead={date} open={!!date} onClose={() => setDate(null)} onDone={onChange} />
+      <BookMeetingModal lead={book} open={!!book} onClose={() => setBook(null)} onDone={onChange} />
+      <ComposeModal open={!!bookingMail} lead={bookingMail?.lead || null} initialSubject={bookingMail?.subject} initialHtml={bookingMail?.html} initialFromId={bookingMail?.fromId}
+        onClose={() => setBookingMail(null)} onSent={onChange} />
     </>
   );
 
-  return { items, modals, startCall, openResult: setResult, openNote: setNote, openEmail: setEmail, openContact: setContact, openDate: setDate };
+  return { items, modals, startCall, sendBookingLink, openBook: setBook, openResult: setResult, openNote: setNote, openEmail: setEmail, openContact: setContact, openDate: setDate };
 }

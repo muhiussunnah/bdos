@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Sparkles, X, Users } from 'lucide-react';
+import { Send, Loader2, Sparkles, X, Users, CalendarPlus } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
-import { RichEditor, plainToHtml, isHtmlEmpty } from '@/components/RichEditor';
+import { RichEditor, plainToHtml, isHtmlEmpty, type RichEditorHandle } from '@/components/RichEditor';
+import { meetingFor } from '@/lib/meetings';
 import { SubjectInput, rememberSubject } from '@/components/SubjectInput';
 import { SentHistoryDialog, type HistoryTarget } from '@/components/SentHistoryDialog';
 import { isEmail } from '@/lib/csv';
@@ -21,8 +22,10 @@ type Picked = { id: string; email: string; company_name: string; contact_name: s
  * (search-as-you-type). Supports Cc/Bcc, attachments, optional "save as lead"
  * and optionally hands the lead over to the automated follow-up sequence.
  */
-export function ComposeModal({ open, onClose, onSent, lead }: {
+export function ComposeModal({ open, onClose, onSent, lead, initialSubject, initialHtml, initialFromId }: {
   open: boolean; onClose: () => void; onSent?: () => void; lead?: Lead | null;
+  /** prefill (e.g. "Send booking link") */
+  initialSubject?: string; initialHtml?: string; initialFromId?: string | null;
 }) {
   const { project, supabase, settings } = useApp();
   const [to, setTo] = useState('');
@@ -43,6 +46,8 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
   const toRef = useRef<HTMLInputElement>(null);
   const senders = sendersFrom(settings);
   const [fromId, setFromId] = useState<string>('');
+  const editorRef = useRef<RichEditorHandle>(null);
+  const bookingUrl = meetingFor(settings?.data, senders, fromId || null).bookingUrl;
   /** "already emailed" warning for the primary recipient; confirmedRef remembers the go-ahead */
   const [dup, setDup] = useState<HistoryTarget[] | null>(null);
   const confirmedRef = useRef<string | null>(null);
@@ -59,10 +64,11 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
     } else {
       setPicked(null); setTo(''); setCompany(''); setContactName('');
     }
-    setCc(''); setBcc(''); setShowCc(false); setSubject(''); setBody(''); setFiles([]); setSaveLead(true); setStartFollowups(true);
-    setFromId(sendersFrom(settings).find((s) => s.isDefault)?.id || sendersFrom(settings)[0]?.id || '');
+    setCc(''); setBcc(''); setShowCc(false); setSubject(initialSubject || ''); setBody(initialHtml || ''); setFiles([]); setSaveLead(true); setStartFollowups(true);
+    const all = sendersFrom(settings);
+    setFromId((initialFromId && all.some((s) => s.id === initialFromId) ? initialFromId : '') || all.find((s) => s.isDefault)?.id || all[0]?.id || '');
     setTimeout(() => toRef.current?.focus(), 50);
-  }, [open, lead, settings]);
+  }, [open, lead, settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // search leads while typing in "To"
   useEffect(() => {
@@ -218,12 +224,20 @@ export function ComposeModal({ open, onClose, onSent, lead }: {
 
         <div className="field !mb-0">
           <div className="flex items-center justify-between"><label>Message</label>
-            <button type="button" onClick={writeWithAI} disabled={!!busy || !picked} title={picked ? 'Let the agent draft it' : 'Pick a lead to enable AI drafting'}
-              className="flex items-center gap-1 text-[12px] font-bold text-accent hover:underline disabled:opacity-40">
-              {busy === 'ai' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Draft with AI
-            </button>
+            <div className="flex items-center gap-3">
+              {bookingUrl && (
+                <button type="button" onClick={() => editorRef.current?.insertHtml(`<a href="${bookingUrl.replace(/"/g, '&quot;')}">${(project?.outreach_language || 'en').startsWith('sv') ? 'Boka ett möte' : 'Book a meeting'} →</a>`)}
+                  title={bookingUrl} className="flex items-center gap-1 text-[12px] font-bold text-accent hover:underline">
+                  <CalendarPlus size={13} /> Booking link
+                </button>
+              )}
+              <button type="button" onClick={writeWithAI} disabled={!!busy || !picked} title={picked ? 'Let the agent draft it' : 'Pick a lead to enable AI drafting'}
+                className="flex items-center gap-1 text-[12px] font-bold text-accent hover:underline disabled:opacity-40">
+                {busy === 'ai' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Draft with AI
+              </button>
+            </div>
           </div>
-          <RichEditor value={body} onChange={setBody} minHeight={260} placeholder="Write your message…" />
+          <RichEditor ref={editorRef} value={body} onChange={setBody} minHeight={260} placeholder="Write your message…" />
         </div>
 
         <AttachmentPicker files={files} onChange={setFiles} compact />

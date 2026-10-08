@@ -1,5 +1,6 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
+import { meetingFor } from '@/lib/meetings';
 import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText, parseAddressList } from '@/lib/email/resend';
 import { isEmail, renderTemplate, recipientVars } from '@/lib/csv';
 import type { Project, Lead } from '@/lib/types';
@@ -51,8 +52,11 @@ export async function POST(req: Request) {
   if (!project) return bad('Project not found', 404);
   const P = project as Project;
 
-  const { apiKey, from } = await resolveEmail(supabase, userId, payload.fromId || null);
+  const { apiKey, from, sender, senders } = await resolveEmail(supabase, userId, payload.fromId || null);
   if (!apiKey) return bad('No Resend key. Add it in Settings → Email.', 428);
+  // {{booking_link}} → the sender's booking page (Settings → Meetings)
+  const { data: settingsRow } = await supabase.from('user_settings').select('data').eq('owner_id', userId).maybeSingle();
+  const bookingLink = meetingFor(settingsRow?.data, senders, sender?.id).bookingUrl;
 
   let attachments;
   try { attachments = await attachmentsFromForm(form); }
@@ -87,10 +91,13 @@ export async function POST(req: Request) {
       continue;
     }
     const lead = r.leadId ? leadMap.get(r.leadId) || null : null;
-    const vars = recipientVars({
-      email, name: r.name ?? lead?.contact_name, company: r.company ?? lead?.company_name,
-      role: r.role ?? lead?.role, website: r.website ?? lead?.website,
-    });
+    const vars = {
+      ...recipientVars({
+        email, name: r.name ?? lead?.contact_name, company: r.company ?? lead?.company_name,
+        role: r.role ?? lead?.role, website: r.website ?? lead?.website,
+      }),
+      booking_link: bookingLink,
+    };
     const subj = renderTemplate(subject, vars);
     const text = renderTemplate(body, vars);
     const htmlOut = richHtml ? wrapEmailHtml(renderTemplate(richHtml, vars)) : textToHtml(text);

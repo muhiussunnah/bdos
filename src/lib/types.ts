@@ -43,6 +43,19 @@ export interface Project {
 /** Latest thing that happened on a call (see lib/sales.ts). */
 export type CallResult = 'meeting' | 'contact' | 'call_again' | 'no_answer' | 'not_interested';
 
+/** A meeting booked from Klientic (or logged after the lead used the booking page). */
+export interface LeadMeeting {
+  uid: string; seq: number;
+  at: string; end: string; duration: number;
+  title: string; link?: string; note?: string;
+  attendees: string[];
+  senderId?: string | null; by: string;
+  status: 'scheduled' | 'cancelled';
+  invited: boolean;
+  rsvp?: 'accepted' | 'declined' | 'tentative';
+  created_at: string; updated_at?: string;
+}
+
 /** Workflow state kept in leads.data (jsonb). Every field is optional — the column may be empty. */
 export interface LeadData {
   owner?: string;             // sender identity id (the salesperson)
@@ -53,6 +66,7 @@ export interface LeadData {
   last_action?: { at: string; result: CallResult; note?: string; by: string; next_at?: string | null };
   /** latest logged note or email (calls live in last_action) */
   last_activity?: { at: string; kind: 'note' | 'email'; text: string; by: string };
+  meeting?: LeadMeeting;
 }
 
 export interface Lead {

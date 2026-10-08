@@ -245,7 +245,7 @@ export default function InboxPage() {
           {stage === 'followup' && <FollowupList leads={byStep.followup} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
           {isPipelineKey(stage) && stage !== 'followup' && (
             <LeadList key={stage} pagerKey={`inbox-${stage}`} leads={byStep[stage]} q={q} empty={EMPTY[stage]} onOpen={openConversationOrLead} onOpenLead={setDrawerLead}
-              onWrite={setComposeLead} onChange={refresh} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />
+              onWrite={setComposeLead} onChange={refresh} log={log} threadFor={threadForLead} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />
           )}
         </>
       )}
@@ -342,8 +342,9 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
 }
 
 /* ── Pipeline steps (Lead, Outreach sent, Meeting booked, Active deal, Won, Disqualified): lead cards ── */
-function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, onChange, threadFor, menuFor }: {
+function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, onChange, log, threadFor, menuFor }: {
   leads: Lead[]; q: string; empty: string; pagerKey: string; onOpen: (l: Lead) => void; onOpenLead: (l: Lead) => void; onWrite: (l: Lead) => void; onChange: () => void;
+  log: ReturnType<typeof useLeadLog>;
   threadFor: (leadId: string) => Thread | null; menuFor: (leadId: string) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 }) {
   const filtered = useMemo(() => leads.filter((l) => !q || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''} ${l.role || ''}`.toLowerCase().includes(q.toLowerCase())), [leads, q]);
@@ -356,7 +357,7 @@ function LeadList({ leads, q, empty, pagerKey, onOpen, onOpenLead, onWrite, onCh
         {pager.slice.map((l, i) => {
           const t = threadFor(l.id);
           return (
-            <LeadFront key={l.id} lead={l} thread={t} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange}
+            <LeadFront key={l.id} lead={l} thread={t} index={i} onOpen={onOpen} onWrite={onWrite} onChange={onChange} log={log}
               menu={[
                 ...(t ? [{ label: 'History (all messages)', icon: <MessagesSquare size={14} />, run: () => onOpen(l) }] : []),
                 { label: 'Open lead details', icon: <ArrowRight size={14} />, run: () => onOpenLead(l) },

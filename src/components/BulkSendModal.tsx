@@ -15,6 +15,7 @@ import { autoMap, rowsToLeads, isEmail, renderTemplate, recipientVars } from '@/
 import { sendersFrom } from '@/lib/email/resend';
 import { EMPTY_HISTORY, historyFor, loadSentHistory, repairContactedLeads, type SentHistory } from '@/lib/sentHistory';
 import { DRIP_OPTIONS, dripDuration, dripEndsAt } from '@/lib/scheduled';
+import { meetingFor } from '@/lib/meetings';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
@@ -25,7 +26,7 @@ type SendResult = { email: string; ok: boolean; error?: string };
 /** The "already emailed" dialog: who it is about and what to do once the user confirms. */
 type Prompt = { targets: HistoryTarget[]; onConfirm: () => void; view?: boolean };
 
-const PLACEHOLDERS = ['{{first_name}}', '{{name}}', '{{company}}', '{{email}}', '{{role}}'];
+const PLACEHOLDERS = ['{{first_name}}', '{{name}}', '{{company}}', '{{email}}', '{{role}}', '{{booking_link}}'];
 const CHUNK = 20;
 const PAGE = 1000;
 
@@ -211,7 +212,8 @@ export function BulkSendModal({ open, onClose, onDone }: { open: boolean; onClos
     else setBody((b) => b + p);
   }
 
-  const previewVars = recipients[0] ? recipientVars(recipients[0]) : { first_name: 'Anna', name: 'Anna Svensson', company: 'Acme AB', email: 'anna@acme.se', role: '', website: '', domain: 'acme.se' };
+  const bookingLink = meetingFor(settings?.data, senders, fromId || null).bookingUrl;
+  const previewVars = { ...(recipients[0] ? recipientVars(recipients[0]) : { first_name: 'Anna', name: 'Anna Svensson', company: 'Acme AB', email: 'anna@acme.se', role: '', website: '', domain: 'acme.se' }), booking_link: bookingLink };
 
   // ---- send (minutes = drip interval; null sends everything right away)
   function send(minutes: number | null = null) {

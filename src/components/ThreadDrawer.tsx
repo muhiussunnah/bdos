@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus, CalendarPlus } from 'lucide-react';
 import { Drawer } from '@/components/ui';
 import { LinkLeadModal, useLeadLog } from '@/components/sales/CallFlow';
 import { relTime } from '@/lib/utils';
@@ -80,6 +80,8 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
               <button onClick={() => log.startCall(lead)} className="btn btn-ghost btn-sm"><Phone size={13} /> Call</button>
               <button onClick={() => log.openNote(lead)} className="btn btn-ghost btn-sm"><StickyNote size={13} /> Note</button>
               <button onClick={() => log.openEmail(lead)} className="btn btn-ghost btn-sm"><MailPlus size={13} /> Email outside Klientic</button>
+              <button onClick={() => log.openBook(lead)} className="btn btn-sm text-white" style={{ background: '#DB2777' }}><CalendarPlus size={13} /> Book meeting</button>
+              <button onClick={() => log.sendBookingLink(lead)} className="btn btn-ghost btn-sm"><Link2 size={13} /> Booking link</button>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-1.5">

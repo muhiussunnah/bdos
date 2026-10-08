@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck, Star, Trash2, Plus } from 'lucide-react';
+import { Check, Loader2, ExternalLink, KeyRound, Mail, SlidersHorizontal, CircleCheck, Star, Trash2, Plus, CalendarDays, Video, Link2, Copy } from 'lucide-react';
+import { meetingSettings, DURATIONS, DEFAULT_TZ, providerOf, PROVIDER_LABEL, type SenderMeeting } from '@/lib/meetings';
 import { useApp } from '@/components/providers/AppProvider';
 import { useDialogs } from '@/components/providers/DialogProvider';
 import { Card, Thinking } from '@/components/ui';
@@ -15,7 +16,8 @@ type Secrets = Record<string, { has: boolean; hint: string; key: string; meta: R
 
 export default function SettingsPage() {
   const { user, supabase, settings, refreshSettings } = useApp();
-  const [tab, setTab] = useState<'ai' | 'email' | 'workspace'>('ai');
+  const [tab, setTab] = useState<'ai' | 'email' | 'meetings' | 'workspace'>('ai');
+  useEffect(() => { try { const t = new URLSearchParams(window.location.search).get('tab'); if (t === 'meetings' || t === 'email' || t === 'workspace' || t === 'ai') setTab(t); } catch { /* ignore */ } }, []);
   const [secrets, setSecrets] = useState<Secrets>({});
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +38,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <div className="inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
-        {([['ai', 'AI Providers', KeyRound], ['email', 'Email', Mail], ['workspace', 'Workspace', SlidersHorizontal]] as const).map(([k, label, Ico]) => (
+        {([['ai', 'AI Providers', KeyRound], ['email', 'Email', Mail], ['meetings', 'Meetings', CalendarDays], ['workspace', 'Workspace', SlidersHorizontal]] as const).map(([k, label, Ico]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12.5px] font-bold transition ${tab === k ? 'bg-ink text-bg' : 'text-dim'}`}>
             <Ico size={14} /> {label}
@@ -46,6 +48,7 @@ export default function SettingsPage() {
 
       {tab === 'ai' && <AITab secrets={secrets} reload={load} />}
       {tab === 'email' && <EmailTab secrets={secrets} reload={load} settings={settings} refreshSettings={refreshSettings} />}
+      {tab === 'meetings' && <MeetingsTab settings={settings} refreshSettings={refreshSettings} />}
       {tab === 'workspace' && <WorkspaceTab settings={settings} refreshSettings={refreshSettings} />}
     </div>
   );
@@ -242,6 +245,100 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
       <p className="hint mb-3">Every address must be on a domain verified in Resend. The <b>default</b> sender is used by automated outreach and follow-ups; when you compose or send to a list you can pick any sender. Replies are answered from the address that received them.</p>
       <div className="flex justify-end"><button onClick={save} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save</button></div>
     </Card>
+  );
+}
+
+const TIMEZONES = ['Europe/Stockholm', 'Europe/Oslo', 'Europe/Copenhagen', 'Europe/Helsinki', 'Europe/London', 'Europe/Berlin', 'Asia/Dhaka', 'America/New_York', 'UTC'];
+
+/**
+ * Per salesperson: booking page (lead picks a time), video room (Teams / Meet / Zoom —
+ * one permanent link) and the Google Calendar address that should get a copy of every
+ * invite. Empty fields fall back to the default sender's values.
+ */
+function MeetingsTab({ settings, refreshSettings }: { settings: ReturnType<typeof useApp>['settings']; refreshSettings: () => void }) {
+  const { user, supabase } = useApp();
+  const senders = sendersFrom(settings);
+  const ms = meetingSettings(settings?.data);
+  const [rows, setRows] = useState<Record<string, SenderMeeting>>({});
+  const [tz, setTz] = useState(DEFAULT_TZ);
+  const [duration, setDuration] = useState(60);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const m = meetingSettings(settings?.data);
+    setRows(m.bySender || {}); setTz(m.timezone || DEFAULT_TZ); setDuration(m.duration || 60);
+  }, [settings]);
+
+  const urlOk = (v?: string) => !v || /^https?:\/\/\S+$/i.test(v.trim());
+  const emailOk = (v?: string) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+  const set = (id: string, patch: Partial<SenderMeeting>) => setRows((r) => ({ ...r, [id]: { ...r[id], ...patch } }));
+  const def = senders.find((s) => s.isDefault) || senders[0];
+
+  async function save() {
+    for (const s of senders) {
+      const r = rows[s.id] || {};
+      if (!urlOk(r.bookingUrl) || !urlOk(r.roomUrl)) return toast.error(`${s.name}: links must start with https://`);
+      if (!emailOk(r.calendarEmail)) return toast.error(`${s.name}: the calendar address is not a valid email`);
+    }
+    setBusy(true);
+    const clean: Record<string, SenderMeeting> = {};
+    for (const [id, r] of Object.entries(rows)) {
+      if (!senders.some((s) => s.id === id)) continue;
+      const v = { bookingUrl: r.bookingUrl?.trim() || undefined, roomUrl: r.roomUrl?.trim() || undefined, calendarEmail: r.calendarEmail?.trim().toLowerCase() || undefined };
+      if (v.bookingUrl || v.roomUrl || v.calendarEmail) clean[id] = v;
+    }
+    const { error } = await supabase.from('user_settings').update({ data: { ...(settings?.data || {}), meeting: { ...ms, timezone: tz, duration, bySender: clean } } }).eq('owner_id', user.id);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    refreshSettings(); toast.success('Meeting settings saved');
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="card-h"><h3 className="flex items-center gap-1.5"><CalendarDays size={16} className="text-accent" /> Meetings</h3><span className="text-[11.5px] text-faint">Book from any card · invites land in Gmail / Outlook / Google Calendar</span></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="field !mb-0"><label>Time zone</label>
+            <select className="input" value={tz} onChange={(e) => setTz(e.target.value)}>{TIMEZONES.map((z) => <option key={z} value={z}>{z.replace('_', ' ')}</option>)}</select></div>
+          <div className="field !mb-0"><label>Default length</label>
+            <select className="input" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>{DURATIONS.map((m) => <option key={m} value={m}>{m} minutes</option>)}</select></div>
+        </div>
+      </Card>
+
+      {senders.length === 0 && <Card><p className="text-[13px] text-dim">Add a sender in Settings → Email first.</p></Card>}
+      {senders.map((s) => {
+        const r = rows[s.id] || {};
+        const fallback = def && s.id !== def.id;
+        const prov = providerOf(r.roomUrl);
+        return (
+          <Card key={s.id}>
+            <div className="card-h !mb-3"><h3>{s.name} <span className="font-semibold text-faint">· {s.email}</span>{s.isDefault && <span className="ml-2 rounded-md bg-[var(--accent-soft)] px-1.5 py-px text-[10.5px] font-bold text-accent">default</span>}</h3>
+              {fallback && <span className="text-[11.5px] text-faint">Empty fields use {def.name}&rsquo;s</span>}</div>
+            <div className="grid gap-3">
+              <div className="field !mb-0">
+                <label className="flex items-center gap-1.5"><Link2 size={13} /> Booking page link <span className="font-normal text-faint">(Google Calendar appointment schedule, Calendly …)</span></label>
+                <div className="flex gap-2">
+                  <input className="input" value={r.bookingUrl || ''} onChange={(e) => set(s.id, { bookingUrl: e.target.value })} placeholder="https://calendar.app.google/…" />
+                  {r.bookingUrl && <a href={r.bookingUrl} target="_blank" rel="noreferrer" className="btn btn-ghost !px-3" title="Open"><ExternalLink size={14} /></a>}
+                  {r.bookingUrl && <button type="button" onClick={() => { navigator.clipboard.writeText(r.bookingUrl || ''); toast.success('Copied'); }} className="btn btn-ghost !px-3" title="Copy"><Copy size={14} /></button>}
+                </div>
+                <p className="hint !mb-0">Leads pick a free time themselves. Use “Send booking link” on any card, or the Booking link button in Compose.</p>
+              </div>
+              <div className="field !mb-0">
+                <label className="flex items-center gap-1.5"><Video size={13} /> Video meeting room {r.roomUrl && <span className="rounded-md bg-surface-2 px-1.5 text-[10.5px] font-bold text-dim">{PROVIDER_LABEL[prov]}</span>}</label>
+                <input className="input" value={r.roomUrl || ''} onChange={(e) => set(s.id, { roomUrl: e.target.value })} placeholder="https://teams.microsoft.com/l/meetup-join/…" />
+                <p className="hint !mb-0">One permanent link that works for every meeting. Teams: Calendar → New meeting → no end date / “Meet now” → copy the join link. It is filled in every invite automatically.</p>
+              </div>
+              <div className="field !mb-0">
+                <label className="flex items-center gap-1.5"><CalendarDays size={13} /> Google Calendar address <span className="font-normal text-faint">(gets a copy of every invite)</span></label>
+                <input className="input" value={r.calendarEmail || ''} onChange={(e) => set(s.id, { calendarEmail: e.target.value })} placeholder="you@gmail.com — the account your iPhone calendar syncs" />
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+
+      <div className="flex justify-end"><button onClick={save} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Save</button></div>
+    </div>
   );
 }
 

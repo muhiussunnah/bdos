@@ -16,6 +16,7 @@ export const NAV: NavItem[] = [
   { href: '/app/outreach', label: 'Outreach', icon: 'Send', group: 'pipeline' },
   { href: '/app/inbox', label: 'Inbox', icon: 'Inbox', group: 'pipeline', badgeKey: 'inbox' },
   { href: '/app/followups', label: 'Follow-ups', icon: 'Repeat', group: 'pipeline', badgeKey: 'followups' },
+  { href: '/app/meetings', label: 'Meetings', icon: 'CalendarDays', group: 'pipeline' },
   { href: '/app/tasks', label: 'Tasks', icon: 'ListChecks', group: 'pipeline', badgeKey: 'tasks' },
   { href: '/app/reports', label: 'Reports', icon: 'BarChart3', group: 'system' },
   { href: '/app/knowledge', label: 'Knowledge Base', icon: 'BookOpen', group: 'system' },
