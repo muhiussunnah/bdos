@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.9',
+    date: '2026-10-09',
+    title: 'Choose the address meeting invites come from',
+    tag: 'improvement',
+    notes: [
+      'Settings → Meetings has "Send invitations from": pick the address leads should see as the meeting organiser. Every Book meeting dialog starts with it (you can still change it per meeting).',
+    ],
+  },
+  {
     version: '1.2.8',
     date: '2026-10-08',
     title: 'Book meetings in Klientic — Teams + Google Calendar',

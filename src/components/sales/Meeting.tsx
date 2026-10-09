@@ -7,7 +7,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { useDialogs } from '@/components/providers/DialogProvider';
 import { Modal } from '@/components/ui';
 import { sendersFrom } from '@/lib/email/resend';
-import { meetingFor, meetingOf, isUpcoming, googleCalendarUrl, providerOf, PROVIDER_LABEL, DURATIONS, fmtShort, RSVP_LABEL } from '@/lib/meetings';
+import { meetingFor, meetingOf, isUpcoming, googleCalendarUrl, providerOf, PROVIDER_LABEL, DURATIONS, fmtShort, RSVP_LABEL, inviteSenderId } from '@/lib/meetings';
 import { addWorkingDays, toDateInput, toTimeInput, leadData } from '@/lib/sales';
 import type { Lead, LeadMeeting } from '@/lib/types';
 
@@ -40,8 +40,7 @@ export function BookMeetingModal({ lead, open, onClose, onDone }: { lead: Lead |
 
   useEffect(() => {
     if (!open || !lead) return;
-    const owner = leadData(lead).owner;
-    const sid = (owner && senders.some((s) => s.id === owner) ? owner : senders.find((s) => s.isDefault)?.id) || '';
+    const sid = inviteSenderId(settings?.data, senders, leadData(lead).owner || null);
     setFromId(sid);
     const c = meetingFor(settings?.data, senders, sid || null);
     if (scheduled) {

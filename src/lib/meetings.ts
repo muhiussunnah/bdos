@@ -9,7 +9,19 @@ import type { Lead, LeadMeeting } from '@/lib/types';
  * ──────────────────────────────────────────────────────────────────────────── */
 
 export interface SenderMeeting { bookingUrl?: string; roomUrl?: string; calendarEmail?: string }
-export interface MeetingSettings { timezone?: string; duration?: number; bySender?: Record<string, SenderMeeting> }
+export interface MeetingSettings {
+  timezone?: string; duration?: number; bySender?: Record<string, SenderMeeting>;
+  /** sender identity every invitation goes out from (empty = the lead owner / default sender) */
+  fromId?: string;
+}
+
+/** Which sender a meeting invite goes out from: the meeting setting, else the lead owner, else the default. */
+export function inviteSenderId(data: unknown, senders: SenderIdentity[], ownerId?: string | null): string {
+  const fixed = meetingSettings(data).fromId;
+  if (fixed && senders.some((s) => s.id === fixed)) return fixed;
+  if (ownerId && senders.some((s) => s.id === ownerId)) return ownerId;
+  return senders.find((s) => s.isDefault)?.id || senders[0]?.id || '';
+}
 export interface MeetingConfig { bookingUrl: string; roomUrl: string; calendarEmail: string; timezone: string; duration: number }
 
 export const DEFAULT_TZ = 'Europe/Stockholm';

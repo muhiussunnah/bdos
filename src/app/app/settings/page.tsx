@@ -262,10 +262,11 @@ function MeetingsTab({ settings, refreshSettings }: { settings: ReturnType<typeo
   const [rows, setRows] = useState<Record<string, SenderMeeting>>({});
   const [tz, setTz] = useState(DEFAULT_TZ);
   const [duration, setDuration] = useState(60);
+  const [fromId, setFromId] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const m = meetingSettings(settings?.data);
-    setRows(m.bySender || {}); setTz(m.timezone || DEFAULT_TZ); setDuration(m.duration || 60);
+    setRows(m.bySender || {}); setTz(m.timezone || DEFAULT_TZ); setDuration(m.duration || 60); setFromId(m.fromId || '');
   }, [settings]);
 
   const urlOk = (v?: string) => !v || /^https?:\/\/\S+$/i.test(v.trim());
@@ -286,7 +287,7 @@ function MeetingsTab({ settings, refreshSettings }: { settings: ReturnType<typeo
       const v = { bookingUrl: r.bookingUrl?.trim() || undefined, roomUrl: r.roomUrl?.trim() || undefined, calendarEmail: r.calendarEmail?.trim().toLowerCase() || undefined };
       if (v.bookingUrl || v.roomUrl || v.calendarEmail) clean[id] = v;
     }
-    const { error } = await supabase.from('user_settings').update({ data: { ...(settings?.data || {}), meeting: { ...ms, timezone: tz, duration, bySender: clean } } }).eq('owner_id', user.id);
+    const { error } = await supabase.from('user_settings').update({ data: { ...(settings?.data || {}), meeting: { ...ms, timezone: tz, duration, bySender: clean, fromId: fromId || undefined } } }).eq('owner_id', user.id);
     setBusy(false);
     if (error) return toast.error(error.message);
     refreshSettings(); toast.success('Meeting settings saved');
@@ -301,6 +302,12 @@ function MeetingsTab({ settings, refreshSettings }: { settings: ReturnType<typeo
             <select className="input" value={tz} onChange={(e) => setTz(e.target.value)}>{TIMEZONES.map((z) => <option key={z} value={z}>{z.replace('_', ' ')}</option>)}</select></div>
           <div className="field !mb-0"><label>Default length</label>
             <select className="input" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>{DURATIONS.map((m) => <option key={m} value={m}>{m} minutes</option>)}</select></div>
+          <div className="field !mb-0 sm:col-span-2"><label>Send invitations from</label>
+            <select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}>
+              <option value="">The lead&rsquo;s owner (or the default sender)</option>
+              {senders.map((s) => <option key={s.id} value={s.id}>{s.name} &lt;{s.email}&gt;</option>)}
+            </select>
+            <p className="hint !mb-0">The address leads see as the organiser of the meeting. You can still change it per meeting.</p></div>
         </div>
       </Card>
 

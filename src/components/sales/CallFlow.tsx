@@ -9,7 +9,7 @@ import { AnchoredMenu, type MenuItem } from '@/components/Menu';
 import { ComposeModal } from '@/components/ComposeModal';
 import { BookMeetingModal } from '@/components/sales/Meeting';
 import { sendersFrom, type SenderIdentity } from '@/lib/email/resend';
-import { meetingFor, meetingOf, bookingLinkEmail, providerOf, PROVIDER_LABEL } from '@/lib/meetings';
+import { meetingFor, meetingOf, bookingLinkEmail, providerOf, PROVIDER_LABEL, inviteSenderId } from '@/lib/meetings';
 import {
   CALL_RESULTS, DEFAULT_NEXT_WORKING_DAYS, addWorkingDays, toDateInput, toTimeInput, fromDateInputs,
   applyCallResult, setPrimaryContact, setOwner, rescheduleNext, linkThreadToLead, leadData, ownerOf, initialsOf,
@@ -410,7 +410,7 @@ export function useLeadLog(onChange: () => void) {
     const cfg = meetingFor(settings?.data, senders, ownerId);
     if (!cfg.bookingUrl) { toast.error('Add your booking page link in Settings → Meetings first'); return; }
     if (!lead.email) { toast.error('This lead has no email address'); return; }
-    const sender = (ownerId && senders.find((s) => s.id === ownerId)) || senders.find((s) => s.isDefault) || senders[0];
+    const sender = senders.find((s) => s.id === inviteSenderId(settings?.data, senders, ownerId)) || senders[0];
     const mail = bookingLinkEmail({
       lang: (project?.outreach_language || 'en').slice(0, 2), firstName: lead.contact_name?.split(/\s+/)[0] || null,
       link: cfg.bookingUrl, senderName: sender?.name || me, videoLabel: cfg.roomUrl ? PROVIDER_LABEL[providerOf(cfg.roomUrl)] : undefined,
