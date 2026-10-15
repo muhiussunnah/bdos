@@ -4,6 +4,7 @@ import { completeJSON } from '@/lib/ai/providers';
 import { discoveryPrompt, describeGeo } from '@/lib/ai/prompts';
 import { priorityFromScores } from '@/lib/utils';
 import { isEmail, isPhone, phoneKey } from '@/lib/csv';
+import { fetchAll, MAX_LEADS_PER_PROJECT } from '@/lib/fetchAll';
 import type { Project } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -60,9 +61,10 @@ export async function POST(req: Request) {
 
   // a lead needs a way to reach it: a real email, or at least a phone number (unless the
   // user asked for email-only). Skip anything already in the project (same email or phone).
-  const { data: existing } = await supabase.from('leads').select('email, phone').eq('project_id', projectId);
-  const seen = new Set((existing || []).map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
-  const seenPhone = new Set((existing || []).map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
+  const existing = await fetchAll<{ email: string | null; phone: string | null }>((a, b) => supabase.from('leads').select('id, email, phone').eq('project_id', projectId).order('id').range(a, b), MAX_LEADS_PER_PROJECT + 1000).catch(() => []);
+  if (existing.length >= MAX_LEADS_PER_PROJECT) return bad(`This project already has ${existing.length} leads — the limit is ${MAX_LEADS_PER_PROJECT}. Delete old leads or use another project.`, 409);
+  const seen = new Set(existing.map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
+  const seenPhone = new Set(existing.map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
   const found = result.leads || [];
   let phoneOnly = 0;
   const withEmail = found.filter((l) => {

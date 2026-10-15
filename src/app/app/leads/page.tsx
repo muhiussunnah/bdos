@@ -16,6 +16,7 @@ import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateR
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportLeads } from '@/lib/export';
 import { isEmail, isPhone } from '@/lib/csv';
+import { fetchAll } from '@/lib/fetchAll';
 import { STAGES } from '@/lib/utils';
 import { PIPELINE_BY_KEY, isPipelineKey, type PipelineKey } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
@@ -60,7 +61,7 @@ function LeadsInner() {
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
+    const data = await fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b)).catch(() => []);
     setLeads((data as Lead[]) || []);
     setLoading(false);
   }, [project, supabase]);

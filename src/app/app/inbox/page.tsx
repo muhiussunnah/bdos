@@ -24,6 +24,7 @@ import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateR
 import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
 import { exportLeads, exportThreads } from '@/lib/export';
 import { promoteScheduled } from '@/lib/scheduled';
+import { fetchAll, MAX_MESSAGES } from '@/lib/fetchAll';
 import { PIPELINE, isPipelineKey, stepOf, stageLabel, type PipelineKey } from '@/lib/pipeline';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead, Stage } from '@/lib/types';
@@ -81,8 +82,8 @@ export default function InboxPage() {
     setLoading(true);
     await promoteScheduled(supabase, user.id).catch(() => 0); // drip-fed emails whose time has come
     const [{ data: m }, { data: l }] = await Promise.all([
-      supabase.from('messages').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).limit(5000),
-      supabase.from('leads').select('*').eq('project_id', project.id).limit(5000),
+      fetchAll<Message>((a, b) => supabase.from('messages').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b), MAX_MESSAGES).catch(() => []).then((data) => ({ data })),
+      fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b)).catch(() => []).then((data) => ({ data })),
     ]);
     setMsgs((m as Message[]) || []);
     setLeads((l as Lead[]) || []);
@@ -380,7 +381,7 @@ function LogReplyModal({ projectId, leads, onClose, onDone }: { projectId: strin
   const [text, setText] = useState('');
   const [leadId, setLeadId] = useState('');
   const [busy, setBusy] = useState(false);
-  const options = leads.filter((l) => l.email).slice(0, 1000);
+  const options = leads.filter((l) => l.email);
   async function submit() {
     if (!text.trim()) return toast.error('Paste the reply text');
     setBusy(true);

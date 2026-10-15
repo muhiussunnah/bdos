@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Send, Sparkles, Phone, Clock, ArrowRight, Plus, ChevronLeft, ChevronRight, BarChart3, CalendarCheck } from 'lucide-react';
 import { meetingOf, isUpcoming, fmtShort, providerOf, PROVIDER_LABEL, RSVP_LABEL } from '@/lib/meetings';
+import { fetchAll } from '@/lib/fetchAll';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, PriorityTag, Thinking } from '@/components/ui';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
@@ -26,7 +27,7 @@ export default function DashboardPage() {
     if (!project) return;
     setLoading(true);
     const [{ data: l }, { data: a }, { data: t }] = await Promise.all([
-      supabase.from('leads').select('*').eq('project_id', project.id),
+      fetchAll<Lead>((from, to) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(from, to)).catch(() => []).then((data) => ({ data })),
       supabase.from('activity_log').select('id,kind,message,created_at').eq('project_id', project.id).order('created_at', { ascending: false }).limit(8),
       supabase.from('tasks').select('id,type,due_at').eq('project_id', project.id).eq('status', 'open'),
     ]);

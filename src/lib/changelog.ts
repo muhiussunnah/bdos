@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.0',
+    date: '2026-10-15',
+    title: 'Up to 5,000 leads per project',
+    tag: 'improvement',
+    notes: [
+      'A project now holds and shows up to 5,000 leads. Before, lists stopped at 1,000 because the database hands out 1,000 rows at a time — Leads, Companies, Inbox, Follow-ups, Meetings, Dashboard, Tasks, Reports and exports now read every page.',
+      'Import list accepts up to 5,000 rows in one file, and duplicate checks look at every lead in the project, not just the first 1,000.',
+      'Outreach and the inbox now load up to 10,000 emails instead of 1,000 / 5,000.',
+      'When a project reaches 5,000 leads, Import and Find with AI say so clearly instead of failing silently.',
+    ],
+  },
+  {
     version: '1.2.10',
     date: '2026-10-15',
     title: 'Phone-only leads',

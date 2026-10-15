@@ -7,6 +7,7 @@ import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, PriorityTag, Thinking, Avatar } from '@/components/ui';
 import { CallResultModal } from '@/components/sales/CallFlow';
 import { dueOf, DUE_COLOR, DUE_SOFT, type Due } from '@/lib/sales';
+import { fetchAll } from '@/lib/fetchAll';
 import type { Task, Lead } from '@/lib/types';
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -54,8 +55,7 @@ export default function TasksPage() {
     setBuilding(true);
     // wipe the agent's auto tasks, keep call tasks the salesperson scheduled (no suggested opening on those)
     await supabase.from('tasks').delete().eq('project_id', project.id).eq('status', 'open').or('type.neq.call,suggested_opening.not.is.null');
-    const { data: leadsRaw } = await supabase.from('leads').select('*').eq('project_id', project.id);
-    const all = (leadsRaw as Lead[]) || [];
+    const all = await fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b)).catch(() => []);
     const now = new Date().toISOString();
     const base = (l: Lead) => ({ project_id: project.id, owner_id: user.id, lead_id: l.id });
     const scheduled = new Set(tasks.filter((t) => t.type === 'call' && !t.suggested_opening).map((t) => t.lead_id));

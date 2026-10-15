@@ -10,6 +10,7 @@ import { Hero } from '@/components/Hero';
 import { LeadDrawer } from '@/components/LeadDrawer';
 import { useLeadLog } from '@/components/sales/CallFlow';
 import { sendersFrom } from '@/lib/email/resend';
+import { fetchAll } from '@/lib/fetchAll';
 import { meetingFor, meetingOf, isUpcoming, googleCalendarUrl, providerOf, PROVIDER_LABEL, RSVP_LABEL } from '@/lib/meetings';
 import type { Lead, LeadMeeting } from '@/lib/types';
 
@@ -31,7 +32,7 @@ export default function MeetingsPage() {
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').eq('project_id', project.id).limit(5000);
+    const data = await fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b)).catch(() => []);
     setLeads((data as Lead[]) || []);
     setLoading(false);
   }, [project, supabase]);

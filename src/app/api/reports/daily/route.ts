@@ -2,6 +2,7 @@ import { auth, bad, ok } from '@/lib/api';
 import { resolveAI } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { reportPrompt } from '@/lib/ai/prompts';
+import { fetchAll } from '@/lib/fetchAll';
 import type { Project, Lead } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
 
   const since = new Date(Date.now() - 86400000).toISOString();
   const [{ data: leads }, { data: msgs }] = await Promise.all([
-    supabase.from('leads').select('*').eq('project_id', projectId),
+    fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', projectId).order('created_at', { ascending: false }).order('id').range(a, b)).catch(() => []).then((data) => ({ data })),
     supabase.from('messages').select('direction,status,category,created_at').eq('project_id', projectId).gte('created_at', since),
   ]);
 

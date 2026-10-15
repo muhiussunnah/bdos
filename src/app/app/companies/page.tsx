@@ -10,6 +10,7 @@ import { useLeadLog } from '@/components/sales/CallFlow';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportLeads } from '@/lib/export';
+import { fetchAll } from '@/lib/fetchAll';
 import type { Lead } from '@/lib/types';
 
 export default function CompaniesPage() {
@@ -23,7 +24,7 @@ export default function CompaniesPage() {
   const load = useCallback(async () => {
     if (!project) return;
     setLoading(true);
-    const { data } = await supabase.from('leads').select('*').eq('project_id', project.id).order('company_name');
+    const data = await fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).order('company_name').order('id').range(a, b)).catch(() => []);
     setLeads((data as Lead[]) || []);
     setLoading(false);
   }, [project, supabase]);

@@ -1,5 +1,6 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { isEmail, phoneKey } from '@/lib/csv';
+import { fetchAll, MAX_LEADS_PER_PROJECT } from '@/lib/fetchAll';
 
 export const runtime = 'edge';
 
@@ -8,7 +9,7 @@ interface IncomingLead {
   role?: string; industry?: string; location?: string; linkedin_url?: string; notes?: string;
 }
 
-const MAX_ROWS = 2000;
+const MAX_ROWS = MAX_LEADS_PER_PROJECT;
 
 /**
  * Bulk-import leads from a user-supplied list (CSV upload / paste).
@@ -32,10 +33,15 @@ export async function POST(req: Request) {
 
   const clean = (v?: string) => (typeof v === 'string' ? v.trim().slice(0, 500) : '') || null;
 
-  // existing emails / phone numbers in this project -> dedupe
-  const { data: existing } = await supabase.from('leads').select('email, phone').eq('project_id', projectId);
-  const seen = new Set((existing || []).map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
-  const seenPhone = new Set((existing || []).map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
+  // existing emails / phone numbers in this project -> dedupe (all of them, not just the first 1000)
+  let existing: { email: string | null; phone: string | null }[];
+  try {
+    existing = await fetchAll<{ email: string | null; phone: string | null }>((a, b) => supabase.from('leads').select('id, email, phone').eq('project_id', projectId).order('id').range(a, b), MAX_LEADS_PER_PROJECT + 1000);
+  } catch (e) { return bad(e instanceof Error ? e.message : 'Could not read existing leads', 500); }
+  const seen = new Set(existing.map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
+  const seenPhone = new Set(existing.map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
+  const room = Math.max(0, MAX_LEADS_PER_PROJECT - existing.length);
+  if (!room) return bad(`This project already has ${existing.length} leads — the limit is ${MAX_LEADS_PER_PROJECT}. Delete old leads or use another project.`, 409);
 
   const rows: Record<string, unknown>[] = [];
   const skipped: { row: number; reason: string }[] = [];
@@ -52,6 +58,7 @@ export async function POST(req: Request) {
     const pk = phoneKey(phone);
     // phone-only rows are deduped on the number (same company, different formatting)
     if (!email && pk.length >= 6 && seenPhone.has(pk)) { skipped.push({ row: i + 1, reason: `Duplicate phone: ${phone}` }); return; }
+    if (rows.length >= room) { skipped.push({ row: i + 1, reason: `Project limit of ${MAX_LEADS_PER_PROJECT} leads reached` }); return; }
     if (email) seen.add(email);
     if (pk.length >= 6) seenPhone.add(pk);
     let website = clean(l.website);

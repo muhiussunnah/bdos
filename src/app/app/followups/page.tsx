@@ -11,6 +11,7 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { FollowupList } from '@/components/FollowupList';
 import { buildThreads, type Thread } from '@/lib/threads';
+import { fetchAll, MAX_MESSAGES } from '@/lib/fetchAll';
 import { stepOf } from '@/lib/pipeline';
 import type { Lead, Message, Stage } from '@/lib/types';
 
@@ -32,8 +33,8 @@ export default function FollowupsPage() {
     if (!project) return;
     setLoading(true);
     const [{ data: l }, { data: m }] = await Promise.all([
-      supabase.from('leads').select('*').eq('project_id', project.id).in('stage', FOLLOWUP_STAGES).order('next_action_at', { ascending: true, nullsFirst: false }),
-      supabase.from('messages').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).limit(5000),
+      fetchAll<Lead>((a, b) => supabase.from('leads').select('*').eq('project_id', project.id).in('stage', FOLLOWUP_STAGES).order('next_action_at', { ascending: true, nullsFirst: false }).order('id').range(a, b)).catch(() => []).then((data) => ({ data })),
+      fetchAll<Message>((a, b) => supabase.from('messages').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(a, b), MAX_MESSAGES).catch(() => []).then((data) => ({ data })),
     ]);
     setLeads((l as Lead[]) || []);
     setMsgs((m as Message[]) || []);

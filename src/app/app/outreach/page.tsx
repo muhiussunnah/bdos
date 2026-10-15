@@ -13,6 +13,7 @@ import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf } fro
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportMessages } from '@/lib/export';
 import { promoteScheduled } from '@/lib/scheduled';
+import { fetchAll, MAX_MESSAGES } from '@/lib/fetchAll';
 import { relTime } from '@/lib/utils';
 import type { Message, Lead } from '@/lib/types';
 
@@ -60,8 +61,7 @@ export default function OutreachPage() {
     if (!project) return;
     setLoading(true);
     await promoteScheduled(supabase, user.id).catch(() => 0); // drip-fed emails whose time has come
-    const { data } = await supabase.from('messages').select('*').eq('project_id', project.id).eq('direction', 'outbound').order('created_at', { ascending: false }).limit(1000);
-    const list = (data as Message[]) || [];
+    const list = await fetchAll<Message>((a, b) => supabase.from('messages').select('*').eq('project_id', project.id).eq('direction', 'outbound').order('created_at', { ascending: false }).order('id').range(a, b), MAX_MESSAGES).catch(() => []);
     setMsgs(list);
     const ids = [...new Set(list.map((m) => m.lead_id).filter(Boolean))] as string[];
     if (ids.length) {

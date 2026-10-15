@@ -7,6 +7,7 @@ import { Sparkles, Send, Clock, BarChart3, ListChecks, Loader2, Zap, ArrowRight 
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Thinking } from '@/components/ui';
 import { Hero } from '@/components/Hero';
+import { fetchAll } from '@/lib/fetchAll';
 import { relTime } from '@/lib/utils';
 import type { Lead } from '@/lib/types';
 
@@ -23,7 +24,7 @@ export default function AutopilotPage() {
     if (!project) return;
     const [{ data: a }, { data: l }] = await Promise.all([
       supabase.from('activity_log').select('id,kind,message,created_at').eq('project_id', project.id).order('created_at', { ascending: false }).limit(20),
-      supabase.from('leads').select('*').eq('project_id', project.id),
+      fetchAll<Lead>((from, to) => supabase.from('leads').select('*').eq('project_id', project.id).order('created_at', { ascending: false }).order('id').range(from, to)).catch(() => []).then((data) => ({ data })),
     ]);
     setActivity((a as Activity[]) || []);
     setLeads((l as Lead[]) || []);
