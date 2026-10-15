@@ -117,6 +117,27 @@ export function isEmail(v?: string | null) {
   return !!v && EMAIL_RE.test(v.trim());
 }
 
+const phoneDigits = (v?: string | null) => String(v || '').replace(/[^\d]/g, '').replace(/^00/, '');
+
+/**
+ * Comparable form of a phone number for dedupe: the last 9 digits, so the national and the
+ * international way of writing it match ("08-530 307 75" = "+46 8 530 307 75").
+ */
+export function phoneKey(v?: string | null): string {
+  const d = phoneDigits(v);
+  return d.length > 9 ? d.slice(-9) : d;
+}
+/** A usable phone number: 6–16 digits, nothing that looks like an email. */
+export function isPhone(v?: string | null): boolean {
+  const s = String(v || '').trim();
+  const n = phoneDigits(s).length;
+  return !!s && !s.includes('@') && n >= 6 && n <= 16;
+}
+/** A lead we can reach: a valid email or a phone number. */
+export function hasContact(l: { email?: string | null; phone?: string | null }): boolean {
+  return isEmail(l.email) || isPhone(l.phone);
+}
+
 /** Render {{placeholders}} in a template. Unknown keys become ''. */
 export function renderTemplate(tpl: string, vars: Record<string, string | null | undefined>) {
   return tpl.replace(/\{\{\s*([a-zA-Z_][\w]*)\s*(?:\|\s*([^}]*))?\}\}/g, (_m, key: string, fallback?: string) => {

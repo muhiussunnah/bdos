@@ -27,6 +27,17 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.2.10',
+    date: '2026-10-15',
+    title: 'Phone-only leads',
+    tag: 'feature',
+    notes: [
+      'Leads no longer need an email — a phone number is enough. Find with AI also keeps organisations that only list a phone (untick the option to get email-only leads as before), Import list keeps rows with an email or a phone, and Add lead accepts either.',
+      'New "Phone only" filter on the Leads page with a live count: everyone you can call but not email. Export works on it too.',
+      'Duplicates are caught on phone numbers as well, so the same company is not imported twice with a different number format.',
+    ],
+  },
+  {
     version: '1.2.9',
     date: '2026-10-09',
     title: 'Choose the address meeting invites come from',

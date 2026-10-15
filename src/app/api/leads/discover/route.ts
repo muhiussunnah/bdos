@@ -3,7 +3,7 @@ import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { discoveryPrompt, describeGeo } from '@/lib/ai/prompts';
 import { priorityFromScores } from '@/lib/utils';
-import { isEmail } from '@/lib/csv';
+import { isEmail, isPhone, phoneKey } from '@/lib/csv';
 import type { Project } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -22,8 +22,11 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as {
     projectId?: string; category?: string; categories?: string[]; area?: string;
     country?: string; region?: string; subcity?: string; count?: number;
+    /** true = only leads with an email (the old behaviour); default: email or phone */
+    emailOnly?: boolean;
   };
   const { projectId, count = 10 } = body;
+  const emailOnly = body.emailOnly === true;
   // accept the new structured shape and the old {category, area} one
   const categories = (Array.isArray(body.categories) ? body.categories : String(body.category || '').split(','))
     .map((c) => String(c).trim()).filter(Boolean).slice(0, 20);
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
   if (!ai.apiKey) return bad('No AI provider key. Add one in Settings → AI Providers.', 428);
 
   const n = Math.min(Math.max(Number(count) || 10, 1), 25);
-  const { system, user } = discoveryPrompt(project as Project, categories, geo, n, knowledge);
+  const { system, user } = discoveryPrompt(project as Project, categories, geo, n, knowledge, emailOnly);
 
   let result: { leads: Found[] };
   try {
@@ -55,15 +58,24 @@ export async function POST(req: Request) {
     return bad(e instanceof Error ? e.message : 'AI request failed', 502);
   }
 
-  // email is mandatory — a lead we cannot email is not a lead. Also skip addresses already in the project.
-  const { data: existing } = await supabase.from('leads').select('email').eq('project_id', projectId).not('email', 'is', null);
-  const seen = new Set((existing || []).map((r) => String(r.email).toLowerCase()));
+  // a lead needs a way to reach it: a real email, or at least a phone number (unless the
+  // user asked for email-only). Skip anything already in the project (same email or phone).
+  const { data: existing } = await supabase.from('leads').select('email, phone').eq('project_id', projectId);
+  const seen = new Set((existing || []).map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
+  const seenPhone = new Set((existing || []).map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
   const found = result.leads || [];
+  let phoneOnly = 0;
   const withEmail = found.filter((l) => {
-    const e = String(l.email || '').trim().toLowerCase();
-    if (!isEmail(e) || /example\.com$|@test\.|@email\.com$|noreply|no-reply/i.test(e)) return false;
-    if (seen.has(e)) return false;
-    seen.add(e); l.email = e;
+    let e = String(l.email || '').trim().toLowerCase();
+    if (!isEmail(e) || /example\.com$|@test\.|@email\.com$|noreply|no-reply/i.test(e)) e = '';
+    const p = isPhone(l.phone) ? String(l.phone).trim() : '';
+    if (!e && (!p || emailOnly)) return false;
+    if (e && seen.has(e)) return false;
+    if (!e && seenPhone.has(phoneKey(p))) return false;
+    if (e) seen.add(e);
+    if (p) seenPhone.add(phoneKey(p));
+    l.email = e || undefined; l.phone = p || undefined;
+    if (!e) phoneOnly++;
     return true;
   });
   const droppedNoEmail = found.length - withEmail.length;
@@ -84,15 +96,16 @@ export async function POST(req: Request) {
   });
   if (!rows.length) {
     return bad(found.length
-      ? `The agent found ${found.length} organisations but none with a usable email address (or they are already in your pipeline). Try a broader area or different niches.`
+      ? `The agent found ${found.length} organisations but none with a usable ${emailOnly ? 'email address' : 'email or phone number'} (or they are already in your pipeline). Try a broader area or different niches.`
       : 'No leads returned — try a broader category.', 502);
   }
 
   const { data: inserted, error } = await supabase.from('leads').insert(rows).select();
   if (error) return bad(error.message, 500);
 
-  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}`, { droppedNoEmail });
-  return ok({ leads: inserted, count: inserted?.length || 0, droppedNoEmail });
+  const phoneOnlyAdded = rows.filter((r) => !r.email).length;
+  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}${phoneOnlyAdded ? ` (${phoneOnlyAdded} phone only)` : ''}`, { droppedNoEmail, phoneOnly: phoneOnlyAdded });
+  return ok({ leads: inserted, count: inserted?.length || 0, droppedNoEmail, phoneOnly: phoneOnlyAdded });
 }
 
 function clamp(n?: number) {

@@ -15,6 +15,7 @@ import { usePager, Pagination, useSelection, Checkbox, SelectAll, BulkBar, Confi
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportLeads } from '@/lib/export';
+import { isEmail, isPhone } from '@/lib/csv';
 import { STAGES } from '@/lib/utils';
 import { PIPELINE_BY_KEY, isPipelineKey, type PipelineKey } from '@/lib/pipeline';
 import type { Lead } from '@/lib/types';
@@ -26,7 +27,11 @@ const FILTERS = [
   { key: 'active', label: 'Active' },
   { key: 'positive', label: 'Won / Active deal' },
   { key: 'import', label: 'Imported' },
+  { key: 'phoneonly', label: 'Phone only' },
 ];
+
+/** Reachable by phone but not by email — call these. */
+const isPhoneOnly = (l: Lead) => !isEmail(l.email) && isPhone(l.phone);
 
 type SortKey = 'company_name' | 'industry' | 'phone' | 'email' | 'fit_score' | 'opportunity_score' | 'priority' | 'stage' | 'created_at';
 const STAGE_ORDER = ['new', 'contacted', 'followup1', 'followup2', 'followup3', 'positive', 'meeting', 'closed', 'lost'];
@@ -86,6 +91,7 @@ function LeadsInner() {
       if (filter === 'active') return ['contacted', 'followup1', 'followup2', 'followup3'].includes(l.stage);
       if (filter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
       if (filter === 'import') return l.source === 'import';
+      if (filter === 'phoneonly') return isPhoneOnly(l);
       return true;
     });
     return sortBy(list, (l) => {
@@ -98,6 +104,7 @@ function LeadsInner() {
     }, sort.dir);
   }, [leads, q, filter, sort, stageKey, bounds]);
 
+  const phoneOnlyCount = useMemo(() => leads.filter(isPhoneOnly).length, [leads]);
   const pager = usePager(filtered, 'leads');
   useEffect(() => { pager.reset(); }, [q, filter, sort, stageKey, range]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageIds = pager.slice.map((l) => l.id);
@@ -131,9 +138,10 @@ function LeadsInner() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
           {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => pickFilter(f.key)}
-              className={`rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${filter === f.key && !stageKey ? 'bg-ink text-bg' : 'text-dim'}`}>
-              {f.label}
+            <button key={f.key} onClick={() => pickFilter(f.key)} title={f.key === 'phoneonly' ? 'Leads with a phone number but no email — call them' : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${filter === f.key && !stageKey ? 'bg-ink text-bg' : 'text-dim'}`}>
+              {f.key === 'phoneonly' && <Phone size={12} />}{f.label}
+              {f.key === 'phoneonly' && <span className={`rounded-md px-1.5 text-[11px] ${filter === f.key && !stageKey ? 'bg-white/20' : 'bg-surface text-faint'}`}>{phoneOnlyCount}</span>}
             </button>
           ))}
         </div>
@@ -291,6 +299,7 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
   const [keywords, setKeywords] = useState<string[]>([]);
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
+  const [emailOnly, setEmailOnly] = useState(false);
 
   // remember the last geography so repeated searches are one click
   useEffect(() => {
@@ -310,11 +319,11 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
       try { localStorage.setItem(LS_GEO, JSON.stringify({ country, region, subcity })); } catch { /* ignore */ }
       const res = await fetch('/api/leads/discover', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, categories: keywords, country: country.trim(), region: region.trim(), subcity: subcity.trim(), count }),
+        body: JSON.stringify({ projectId: project.id, categories: keywords, country: country.trim(), region: region.trim(), subcity: subcity.trim(), count, emailOnly }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success(`${data.count} leads with email added to the pipeline${data.droppedNoEmail ? ` · ${data.droppedNoEmail} skipped (no email)` : ''}`);
+      toast.success(`${data.count} leads added${data.phoneOnly ? ` (${data.phoneOnly} phone only)` : ''}${data.droppedNoEmail ? ` · ${data.droppedNoEmail} skipped (no ${emailOnly ? 'email' : 'email or phone'})` : ''}`);
       onDone(); onClose(); setKeywords([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Discovery failed');
@@ -325,7 +334,7 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
 
   return (
     <Modal open={open} onClose={onClose} title="Find leads with AI">
-      <p className="mb-4 text-[13px] text-dim">The agent searches for organisations that fit {project?.name}, scores each on fit &amp; opportunity, and drops them into your pipeline. Only organisations with a real contact email are added — no email, no lead.</p>
+      <p className="mb-4 text-[13px] text-dim">The agent searches for organisations that fit {project?.name}, scores each on fit &amp; opportunity, and drops them into your pipeline. Every lead has a real email or phone number — no way to reach them, no lead.</p>
 
       <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-faint">Where</div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -350,6 +359,11 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
           <div className="input !bg-surface-2 text-[12.5px] text-dim">{keywords.length ? keywords.join(' · ') : '—'}{where ? ` in ${where}` : ''}</div></div>
       </div>
 
+      <label className="mt-3 flex items-start gap-2 text-[12.5px] text-dim">
+        <input type="checkbox" className="mt-0.5" checked={!emailOnly} onChange={(e) => setEmailOnly(!e.target.checked)} />
+        <span>Also add organisations that only list a <b className="text-ink">phone number</b> (no public email) — find them later under the <b className="text-ink">Phone only</b> filter and call them.</span>
+      </label>
+
       {busy && <div className="mt-3"><Thinking label={`Searching ${where || 'everywhere'} for ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? '…' : ''}`} /></div>}
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="btn btn-ghost">Cancel</button>
@@ -369,10 +383,12 @@ function ManualModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
 
   async function save() {
     if (!project || !f.company_name) return toast.error('Company name is required');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) return toast.error('A valid email is required — leads without email cannot be contacted');
+    const email = f.email.trim().toLowerCase();
+    if (email && !isEmail(email)) return toast.error('That email address is not valid');
+    if (!email && !isPhone(f.phone)) return toast.error('Add an email or a phone number — we need a way to reach them');
     setBusy(true);
     const { error } = await supabase.from('leads').insert({
-      ...f, project_id: project.id, owner_id: user.id, source: 'manual',
+      ...f, email: email || null, phone: f.phone.trim() || null, project_id: project.id, owner_id: user.id, source: 'manual',
       fit_score: 50, opportunity_score: 50, priority: 'B', stage: 'new',
     });
     setBusy(false);
@@ -386,7 +402,7 @@ function ManualModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
     <Modal open={open} onClose={onClose} title="Add a lead">
       <div className="grid grid-cols-2 gap-3">
         {([['company_name', 'Company *'], ['website', 'Website'], ['industry', 'Industry'], ['location', 'Location'],
-          ['contact_name', 'Contact name'], ['role', 'Role'], ['email', 'Email *'], ['phone', 'Phone']] as const).map(([k, label]) => (
+          ['contact_name', 'Contact name'], ['role', 'Role'], ['email', 'Email (or phone)'], ['phone', 'Phone (or email)']] as const).map(([k, label]) => (
           <div className="field" key={k}><label>{label}</label>
             <input className="input" value={f[k]} onChange={(e) => set(k, e.target.value)} /></div>
         ))}

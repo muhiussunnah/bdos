@@ -27,7 +27,7 @@ export function describeGeo(g: DiscoveryGeo): string {
   return [g.subcity, g.region, g.country].map((s) => (s || '').trim()).filter(Boolean).join(', ') || 'anywhere';
 }
 
-export function discoveryPrompt(p: Project, categories: string[], geo: DiscoveryGeo, count: number, knowledge?: string) {
+export function discoveryPrompt(p: Project, categories: string[], geo: DiscoveryGeo, count: number, knowledge?: string, emailOnly = false) {
   const cats = categories.map((c) => c.trim()).filter(Boolean);
   const catText = cats.length > 1 ? `these categories / niches: ${cats.map((c) => `"${c}"`).join(', ')}` : `"${cats[0] || 'relevant'}"`;
   const where = describeGeo(geo);
@@ -41,8 +41,10 @@ export function discoveryPrompt(p: Project, categories: string[], geo: Discovery
 
 You are a lead-research agent. Find real, plausible organisations matching ${catText} in/near ${where} that would be a strong fit as customers or partners. For each, estimate a Fit Score (1-100, how well they match our ideal customer) and an Opportunity Score (1-100, likelihood & value of a deal). Prefer specific, named, findable organisations over generic placeholders.${cats.length > 1 ? ' Spread the results across the categories so each niche is represented.' : ''}
 ${geoRules}
-EMAIL IS MANDATORY: we can only contact leads by email, so every lead MUST include a real, publicly listed email address for the organisation — the general contact address is fine (info@, hello@, kontakt@, booking@, contact@, or a named person's address when it is public). Prefer addresses on the organisation's own website domain. Leads without an email are useless and will be discarded, so skip any organisation whose email you cannot provide and pick another one instead. Never invent an address that does not exist.`,
-    user: `Return ${count} leads as strict JSON: {"leads":[{"company_name","website","industry","location","contact_name","role","email","phone","linkedin_url","reason","fit_score","opportunity_score"}]}. "email" is required for every lead (general contact address is acceptable). Use null for other fields you genuinely don't know — never fabricate phone numbers. "location" must be the town + country. "industry" should name which of the requested categories the lead belongs to. "reason" = one sentence on why they are relevant to us. Categories: ${cats.join(', ') || 'relevant'}. Location: ${where}.`,
+${emailOnly
+    ? `EMAIL IS MANDATORY: we can only contact leads by email, so every lead MUST include a real, publicly listed email address for the organisation — the general contact address is fine (info@, hello@, kontakt@, booking@, contact@, or a named person's address when it is public). Prefer addresses on the organisation's own website domain. Leads without an email are useless and will be discarded, so skip any organisation whose email you cannot provide and pick another one instead. Never invent an address that does not exist.`
+    : `CONTACT IS MANDATORY: every lead MUST include at least one real, publicly listed way to reach the organisation — an email address (preferred: info@, hello@, kontakt@, booking@, contact@ or a named person's public address, ideally on their own website domain) and/or a phone number. Give both whenever both are public. If no email is public, the phone number alone is fine — still include the lead. Leads with neither are discarded. Never invent an email address or a phone number.`}`,
+    user: `Return ${count} leads as strict JSON: {"leads":[{"company_name","website","industry","location","contact_name","role","email","phone","linkedin_url","reason","fit_score","opportunity_score"}]}. ${emailOnly ? '"email" is required for every lead (general contact address is acceptable).' : 'Every lead needs "email" or "phone" (both when public); use null for whichever is not publicly listed.'} Use null for other fields you genuinely don't know — never fabricate emails or phone numbers. "location" must be the town + country. "industry" should name which of the requested categories the lead belongs to. "reason" = one sentence on why they are relevant to us. Categories: ${cats.join(', ') || 'relevant'}. Location: ${where}.`,
   };
 }
 

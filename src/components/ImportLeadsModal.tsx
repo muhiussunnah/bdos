@@ -6,7 +6,7 @@ import { Loader2, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
-import { autoMap, rowsToLeads, isEmail, LEAD_FIELDS, FIELD_LABELS, type LeadField } from '@/lib/csv';
+import { autoMap, rowsToLeads, isEmail, isPhone, hasContact, LEAD_FIELDS, FIELD_LABELS, type LeadField } from '@/lib/csv';
 
 type Result = { inserted: number; skipped: { row: number; reason: string }[] };
 
@@ -35,9 +35,11 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
   }
 
   const leads = rows ? rowsToLeads(rows, mapping, hasHeader) : [];
-  const [requireEmail, setRequireEmail] = useState(true);
+  /** which rows to keep: a way to reach them (email or phone), email only, or everything with a name */
+  const [keep, setKeep] = useState<'contact' | 'email' | 'all'>('contact');
   const withEmail = leads.filter((l) => isEmail(l.email)).length;
-  const toImport = leads.filter((l) => (requireEmail ? isEmail(l.email) : l.company_name || isEmail(l.email)));
+  const phoneOnly = leads.filter((l) => !isEmail(l.email) && isPhone(l.phone)).length;
+  const toImport = leads.filter((l) => (keep === 'email' ? isEmail(l.email) : keep === 'contact' ? hasContact(l) : l.company_name || isEmail(l.email)));
   const usable = toImport.length;
   const cols = rows ? Math.max(...rows.map((r) => r.length)) : 0;
   const headers = rows ? (hasHeader ? rows[0] : Array.from({ length: cols }, (_, i) => `Column ${i + 1}`)) : [];
@@ -45,7 +47,7 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
 
   async function run() {
     if (!project || !leads.length) return;
-    if (!usable) return toast.error(requireEmail ? 'No rows with a valid email — map the Email column or allow rows without email' : 'Map at least a Company or Email column');
+    if (!usable) return toast.error(keep === 'email' ? 'No rows with a valid email — map the Email column or keep rows with a phone too' : keep === 'contact' ? 'No rows with an email or phone — map the Email or Phone column' : 'Map at least a Company or Email column');
     setBusy(true);
     try {
       const res = await fetch('/api/leads/import', {
@@ -100,10 +102,16 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
               <input type="checkbox" checked={hasHeader} onChange={(e) => setHasHeader(e.target.checked)} /> First row is a header
             </label>
             <span className="text-faint">·</span>
-            <span className="text-dim"><b className="text-ink">{leads.length}</b> rows · <b className="text-ink">{withEmail}</b> with a valid email</span>
+            <span className="text-dim"><b className="text-ink">{leads.length}</b> rows · <b className="text-ink">{withEmail}</b> with email · <b className="text-ink">{phoneOnly}</b> phone only</span>
             <span className="text-faint">·</span>
-            <label className="flex items-center gap-2 font-semibold text-ink" title="Leads without an email cannot be contacted by the agent">
-              <input type="checkbox" checked={requireEmail} onChange={(e) => setRequireEmail(e.target.checked)} /> Skip rows without email
+            <label className="flex items-center gap-2 font-semibold text-ink" title="Phone-only leads are for calling; the agent can only email leads that have an email">
+              Import
+              <select className="input !w-auto !py-1 !text-[12.5px]" value={keep} onChange={(e) => setKeep(e.target.value as typeof keep)}>
+                <option value="contact">rows with email or phone</option>
+                <option value="email">only rows with email</option>
+                <option value="all">every row with a company</option>
+              </select>
+              <span className="font-normal text-faint">→ {usable}</span>
             </label>
           </div>
 

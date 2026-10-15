@@ -1,5 +1,5 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
-import { isEmail } from '@/lib/csv';
+import { isEmail, phoneKey } from '@/lib/csv';
 
 export const runtime = 'edge';
 
@@ -32,9 +32,10 @@ export async function POST(req: Request) {
 
   const clean = (v?: string) => (typeof v === 'string' ? v.trim().slice(0, 500) : '') || null;
 
-  // existing emails in this project -> dedupe
-  const { data: existing } = await supabase.from('leads').select('email').eq('project_id', projectId).not('email', 'is', null);
-  const seen = new Set((existing || []).map((r) => String(r.email).toLowerCase()));
+  // existing emails / phone numbers in this project -> dedupe
+  const { data: existing } = await supabase.from('leads').select('email, phone').eq('project_id', projectId);
+  const seen = new Set((existing || []).map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
+  const seenPhone = new Set((existing || []).map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
 
   const rows: Record<string, unknown>[] = [];
   const skipped: { row: number; reason: string }[] = [];
@@ -47,13 +48,18 @@ export async function POST(req: Request) {
     if (!company && email) company = email.split('@')[1].replace(/\.[a-z]+$/i, '');
     if (!company) { skipped.push({ row: i + 1, reason: 'No company or email' }); return; }
     if (email && seen.has(email)) { skipped.push({ row: i + 1, reason: `Duplicate: ${email}` }); return; }
+    const phone = clean(l.phone);
+    const pk = phoneKey(phone);
+    // phone-only rows are deduped on the number (same company, different formatting)
+    if (!email && pk.length >= 6 && seenPhone.has(pk)) { skipped.push({ row: i + 1, reason: `Duplicate phone: ${phone}` }); return; }
     if (email) seen.add(email);
+    if (pk.length >= 6) seenPhone.add(pk);
     let website = clean(l.website);
     if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
     rows.push({
       project_id: projectId, owner_id: userId, source: 'import',
       company_name: company, contact_name: clean(l.contact_name), email, website,
-      phone: clean(l.phone), role: clean(l.role), industry: clean(l.industry), location: clean(l.location),
+      phone, role: clean(l.role), industry: clean(l.industry), location: clean(l.location),
       linkedin_url: clean(l.linkedin_url), notes: clean(l.notes),
       fit_score: 50, opportunity_score: 50, priority: 'B', stage: 'new', tags,
     });
