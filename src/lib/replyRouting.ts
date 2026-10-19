@@ -153,9 +153,13 @@ export function routeReply(r: RouteReply, ix: RoutingIndex): Route {
   const exact = ix.byEmail.get(sender);
   if (exact?.length) { const best = ranked(exact)[0].lead; return { leadId: best.id, projectId: best.project_id, how: 'email' }; }
 
-  // 2. we wrote to this address (maybe without saving a lead)
+  // 2. we wrote to this address — decisive when that email belongs to a lead; an email without a
+  //    lead (e.g. an answer written from a conversation that sat in the wrong project) is only a
+  //    fallback after the lead-based signals below
   const sentTo = ix.outsByAddr.get(sender);
-  if (sentTo?.length) return viaOut(pickOut(sentTo), 'sent');
+  const sentLinked = sentTo?.filter((o) => o.lead_id && ix.leadById.has(o.lead_id)) || [];
+  if (sentLinked.length) return viaOut(pickOut(sentLinked), 'sent');
+  const sentLoose: Route | null = sentTo?.length ? viaOut(pickOut(sentTo), 'sent') : null;
 
   // 3. a lead address quoted in the reply ("Från: Albin … Till: kommun@sater.se")
   const quoted = extractEmails(r.body).filter((e) => e !== sender && !own.has(e) && !ownDomains.has(baseDomain(domainOf(e))));
@@ -179,6 +183,8 @@ export function routeReply(r: RouteReply, ix: RoutingIndex): Route {
       if (projects.size === 1) return { leadId: top.length === 1 && a.s > 0 ? a.lead.id : null, projectId: a.lead.project_id, how: 'domain' };
     }
   }
+
+  if (sentLoose) return sentLoose;
 
   // 5. the subject of an email we sent — only when it points at a single project
   if (replyBase.length >= 5) {

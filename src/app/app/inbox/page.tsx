@@ -102,8 +102,8 @@ export default function InboxPage() {
       const res = await fetch('/api/inbox/reroute', { method: 'POST' });
       const d = await res.json(); if (!res.ok) throw new Error(d.error);
       try { sessionStorage.setItem(SS_RESORT, '1'); } catch { /* ignore */ }
-      if (d.moved || d.linked) {
-        toast.success(`Replies sorted: ${d.moved} moved to their own project${d.linked ? ` · ${d.linked} linked to their lead` : ''}`);
+      if (d.moved || d.linked || d.answers) {
+        toast.success(`Replies sorted: ${d.moved} moved to their own project${d.linked ? ` · ${d.linked} linked to their lead` : ''}${d.answers ? ` · ${d.answers} of your answers followed` : ''}`);
         load(); refreshCounts();
       } else if (!quiet) toast.success('Every reply is already in the right project');
     } catch (e) { if (!quiet) toast.error(e instanceof Error ? e.message : 'Could not sort replies'); }

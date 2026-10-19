@@ -27,6 +27,16 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.2',
+    date: '2026-10-19',
+    title: 'Sorting replies also moves your answers',
+    tag: 'fix',
+    notes: [
+      'When a reply is moved to its own project, the answers you wrote from the wrong Inbox move with it, so the whole conversation is in one place.',
+      'A reply from someone you once answered from the wrong project now still goes to their lead\'s project (charlotta@… → All Cities).',
+    ],
+  },
+  {
     version: '1.3.1',
     date: '2026-10-19',
     title: 'Replies land in the right project · newest message first',
