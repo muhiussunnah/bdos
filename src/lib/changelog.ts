@@ -27,6 +27,21 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.1',
+    date: '2026-10-19',
+    title: 'Replies land in the right project · newest message first',
+    tag: 'fix',
+    notes: [
+      'Replies now go to the Inbox of the project they answer — Hotels to Hotels, Cities to Cities, Socialt engagemang to Socialt engagemang. Before, a reply only matched when it came from exactly the address we wrote to; anything else (malin@sater.se answering mail sent to kommun@sater.se) fell into the first project.',
+      'Klientic now matches a reply on the address, the email we sent to it, a lead address quoted in the reply, the organisation domain (never gmail/outlook) and the subject — and links it to the lead when it is clear.',
+      'Replies that already landed in the wrong project are moved automatically when you open the Inbox; "Sort replies" runs it again any time. Nothing is deleted.',
+      'Conversations open on the newest message (switch to "Oldest first" if you like). The earlier emails quoted inside a reply are folded under "Show earlier messages", so you see what they actually wrote.',
+      'The same email stored twice (a reply that arrived and was also logged by hand, a double send, two forwarded copies) is shown once with a ×2 mark, and the same reply arriving twice is no longer saved twice.',
+      'Pipeline cards in the Inbox are ordered by latest activity — leads that just replied or were just emailed come first.',
+      '"Link to a lead" searches every project and moves the conversation to that lead\'s project. "Log a reply" works again.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-10-15',
     title: 'Up to 5,000 leads per project',

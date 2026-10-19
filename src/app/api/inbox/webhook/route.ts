@@ -5,6 +5,7 @@ import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { completeJSON } from '@/lib/ai/providers';
 import { classifyPrompt } from '@/lib/ai/prompts';
 import { rsvpFromSubject, RSVP_LABEL } from '@/lib/meetings';
+import { routeOne } from '@/lib/replyRouting';
 import type { Project, Lead, LeadData, ReplyCategory } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -79,27 +80,49 @@ export async function POST(req: Request) {
   // mailer-daemon bounces, newsletter blasts to the support address)
   if (isAutomatedSender(sender, mail.subject || event.data.subject || '')) return ignore('automated sender');
 
-  // 3. link to a lead (most recently contacted first)
-  const { data: leadRows } = await admin.from('leads').select('*').eq('owner_id', owner).ilike('email', sender)
-    .order('last_contacted_at', { ascending: false, nullsFirst: false }).limit(1);
-  const lead = ((leadRows || [])[0] as Lead | undefined) || null;
+  const body = (mail.text && mail.text.trim()) || htmlToText(mail.html || '') || '(empty message)';
+  const subject = mail.subject || event.data.subject || null;
+  const attachments = (mail.attachments || []).map((a) => a.filename).filter(Boolean);
+  const rfcId = mail.message_id || event.data.message_id || null;
 
-  let projectId = lead?.project_id || null;
+  // the same email reaching us twice (sent to two of our forwarded mailboxes, or forwarded twice):
+  // same Message-ID, or same sender + subject + text within two hours
+  if (rfcId) {
+    const { data: same } = await admin.from('messages').select('id').eq('owner_id', owner).eq('direction', 'inbound').eq('ai_meta->>message_id', rfcId).limit(1);
+    if (same?.length) return NextResponse.json({ ok: true, duplicate: true, messageId: same[0].id });
+  }
+  {
+    let q = admin.from('messages').select('id, body').eq('owner_id', owner).eq('direction', 'inbound').eq('from_email', sender)
+      .gte('created_at', new Date(Date.now() - 2 * 3600000).toISOString());
+    q = subject ? q.eq('subject', subject) : q.is('subject', null);
+    const { data: recent } = await q.limit(20);
+    const same = (recent || []).find((m) => String(m.body || '').slice(0, 2000) === body.slice(0, 2000));
+    if (same) return NextResponse.json({ ok: true, duplicate: true, messageId: same.id });
+  }
+
+  // 3. which lead / project is this a reply to? exact address first, then the address we
+  //    wrote to, a lead address quoted in the reply, the organisation's domain, the subject
+  const ownRow = (settingsRows || []).find((r) => r.owner_id === owner);
+  const own = [...new Set([...sendersFrom(ownRow).map((s) => s.email.toLowerCase()), ...recipients])];
+  const route = await routeOne(admin, owner, { sender, subject, body, receivedAt, own }).catch(() => ({ leadId: null, projectId: null, how: null }));
+  let lead: Lead | null = null;
+  if (route.leadId) {
+    const { data } = await admin.from('leads').select('*').eq('id', route.leadId).maybeSingle();
+    lead = (data as Lead | null) || null;
+  }
+
+  let projectId = lead?.project_id || route.projectId || null;
   if (!projectId) {
     const { data: projects } = await admin.from('projects').select('id, is_default').eq('owner_id', owner).order('created_at');
     projectId = (projects || []).find((p) => p.is_default)?.id || (projects || [])[0]?.id || null;
   }
   if (!projectId) return ignore('owner has no project');
 
-  const body = (mail.text && mail.text.trim()) || htmlToText(mail.html || '') || '(empty message)';
-  const subject = mail.subject || event.data.subject || null;
-  const attachments = (mail.attachments || []).map((a) => a.filename).filter(Boolean);
-
   const { data: created, error } = await admin.from('messages').insert({
     project_id: projectId, owner_id: owner, lead_id: lead?.id || null,
     direction: 'inbound', status: 'received', subject, body: body.slice(0, 20000),
     from_email: sender, to_email: receivedAt, provider_message_id: emailId,
-    ai_meta: { source: 'resend', message_id: mail.message_id || event.data.message_id || null, attachments, headers_from: mail.headers?.from || null },
+    ai_meta: { source: 'resend', message_id: rfcId, attachments, headers_from: mail.headers?.from || null, route: route.how },
   }).select('id').single();
   if (error || !created) return NextResponse.json({ error: error?.message || 'insert failed' }, { status: 500 });
 
@@ -109,7 +132,7 @@ export async function POST(req: Request) {
   if (rsvp && lead && meeting) {
     const now = new Date().toISOString();
     await admin.from('leads').update({ data: { ...(lead.data as LeadData), meeting: { ...meeting, rsvp, updated_at: now } }, updated_at: now }).eq('id', lead.id);
-    await admin.from('messages').update({ handled: true, category: 'meeting_request', ai_meta: { source: 'resend', rsvp, attachments } }).eq('id', created.id);
+    await admin.from('messages').update({ handled: true, category: 'meeting_request', ai_meta: { source: 'resend', message_id: rfcId, route: route.how, rsvp, attachments } }).eq('id', created.id);
     await admin.from('activity_log').insert({ owner_id: owner, project_id: projectId, kind: 'meeting', message: `${lead.company_name}: ${RSVP_LABEL[rsvp].toLowerCase()} the meeting invitation`, meta: { leadId: lead.id, rsvp, auto: true } });
     return NextResponse.json({ ok: true, messageId: created.id, leadId: lead.id, rsvp });
   }
@@ -129,7 +152,7 @@ export async function POST(req: Request) {
       const c = await completeJSON<Classification>({ ...ai, system, messages: [{ role: 'user', content: user }], temperature: 0.3, maxTokens: 900 });
       await admin.from('messages').update({
         category: c.category, needs_human: c.needs_human,
-        ai_meta: { source: 'resend', message_id: mail.message_id || null, attachments, confidence: c.confidence, summary: c.summary, draft: c.draft },
+        ai_meta: { source: 'resend', message_id: rfcId, route: route.how, attachments, confidence: c.confidence, summary: c.summary, draft: c.draft },
       }).eq('id', created.id);
       category = c.category;
       if (lead && ['positive', 'interested', 'meeting_request'].includes(c.category)) {

@@ -260,33 +260,40 @@ export function OwnerBadge({ lead, onChange, size = 26 }: { lead: Lead; onChange
 export function LinkLeadModal({ open, onClose, onDone, projectId, messageIds, counterpart }: {
   open: boolean; onClose: () => void; onDone: () => void; projectId: string; messageIds: string[]; counterpart: string;
 }) {
-  const { supabase } = useApp();
+  const { supabase, projects } = useApp();
   const { by } = useSalesperson(null);
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Lead[]>([]);
+  const projectName = (id: string) => projects.find((p) => p.id === id)?.name || '';
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => { if (open) { setQ(counterpart.split('@')[1]?.split('.')[0] || ''); } }, [open, counterpart]);
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(async () => {
       const needle = q.trim();
-      let query = supabase.from('leads').select('*').eq('project_id', projectId).order('updated_at', { ascending: false }).limit(12);
+      // every project: a reply that landed in the wrong Inbox can be linked to its real lead
+      let query = supabase.from('leads').select('*').order('updated_at', { ascending: false }).limit(20);
       if (needle) query = query.or(`company_name.ilike.%${needle}%,email.ilike.%${needle}%,contact_name.ilike.%${needle}%,website.ilike.%${needle}%`);
       const { data } = await query;
-      setRows((data as Lead[]) || []);
+      // this project's leads first
+      setRows(((data as Lead[]) || []).sort((a, b) => Number(b.project_id === projectId) - Number(a.project_id === projectId)));
     }, 200);
     return () => clearTimeout(t);
   }, [open, q, projectId, supabase]);
 
   async function pick(l: Lead) {
     setBusy(l.id);
-    try { await linkThreadToLead(supabase, messageIds, counterpart, l, by); toast.success(`Linked to ${l.company_name} · ${counterpart} is now the primary email`); onDone(); onClose(); }
+    try {
+      await linkThreadToLead(supabase, messageIds, counterpart, l, by);
+      toast.success(`Linked to ${l.company_name} · ${counterpart} is now the primary email${l.project_id !== projectId ? ` · moved to ${projectName(l.project_id) || 'its project'}` : ''}`);
+      onDone(); onClose();
+    }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Could not link'); }
     finally { setBusy(null); }
   }
   return (
     <Modal open={open} onClose={onClose} title="Link this conversation to a lead">
-      <p className="mb-3 text-[12.5px] text-dim">{counterpart} replied from an address that is not on any lead. Pick the company — the reply joins its history and this address becomes the primary email (the old one is kept).</p>
+      <p className="mb-3 text-[12.5px] text-dim">{counterpart} replied from an address that is not on any lead. Pick the company (any project) — the reply joins its history, moves to that project&rsquo;s Inbox, and this address becomes the primary email (the old one is kept).</p>
       <div className="mb-2 flex items-center gap-2 rounded-[11px] border border-line bg-surface px-3 py-2">
         <Search size={14} className="text-faint" /><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Company, email, website…" className="w-full bg-transparent text-[13px] outline-none text-ink" />
       </div>
@@ -295,6 +302,7 @@ export function LinkLeadModal({ open, onClose, onDone, projectId, messageIds, co
         {rows.map((l) => (
           <button key={l.id} onClick={() => pick(l)} disabled={!!busy} className="flex w-full items-center gap-3 border-t border-line px-3 py-2.5 text-left first:border-t-0 hover:bg-surface-2">
             <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-bold text-ink">{l.company_name}</div><div className="truncate text-[11.5px] text-faint">{[l.contact_name, l.email].filter(Boolean).join(' · ') || 'no contact yet'}</div></div>
+            {projects.length > 1 && <span className={`flex-none rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${l.project_id === projectId ? 'bg-surface-2 text-dim' : 'bg-[var(--accent-soft)] text-accent'}`}>{projectName(l.project_id)}</span>}
             {busy === l.id ? <Loader2 size={14} className="animate-spin text-accent" /> : <Link2 size={14} className="text-faint" />}
           </button>
         ))}

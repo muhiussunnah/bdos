@@ -296,7 +296,8 @@ export async function applyCallResult(supabase: SupabaseClient, lead: Lead, inpu
 /** Attach an unlinked conversation to a lead; the replier's address becomes the primary email. */
 export async function linkThreadToLead(supabase: SupabaseClient, messageIds: string[], counterpart: string, lead: Lead, by: string): Promise<void> {
   if (messageIds.length) {
-    const { error } = await supabase.from('messages').update({ lead_id: lead.id }).in('id', messageIds);
+    // the conversation follows the lead into its project's Inbox
+    const { error } = await supabase.from('messages').update({ lead_id: lead.id, project_id: lead.project_id }).in('id', messageIds);
     if (error) throw new Error(error.message);
   }
   if (counterpart && counterpart.includes('@') && counterpart.toLowerCase() !== (lead.email || '').toLowerCase()) {

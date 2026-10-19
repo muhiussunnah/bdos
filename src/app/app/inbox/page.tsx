@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
   Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2,
-  FileText, XCircle, PhoneCall, PenLine, TrendingUp,
+  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal, Avatar } from '@/components/ui';
@@ -21,7 +21,7 @@ import { useLeadLog } from '@/components/sales/CallFlow';
 import { LeadPicker } from '@/components/LeadPicker';
 import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_SENDERS } from '@/components/SenderFilter';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
-import { buildThreads, rangeBounds, inRange, rangeLabel, type Thread } from '@/lib/threads';
+import { buildThreads, rangeBounds, inRange, rangeLabel, splitQuoted, stamp, type Thread } from '@/lib/threads';
 import { exportLeads, exportThreads } from '@/lib/export';
 import { promoteScheduled } from '@/lib/scheduled';
 import { fetchAll, MAX_MESSAGES } from '@/lib/fetchAll';
@@ -53,6 +53,8 @@ const EMPTY: Record<PipelineKey, string> = {
 };
 
 const LS_STAGE = 'klientic.inbox.stage';
+/** once per browser session: move replies that landed in the wrong project (see /api/inbox/reroute) */
+const SS_RESORT = 'klientic.inbox.resorted.v131';
 const ALL_KEYS: StageKey[] = [...PIPELINE.map((p) => p.key), ...EXTRA.map((e) => e.key)];
 
 export default function InboxPage() {
@@ -92,6 +94,30 @@ export default function InboxPage() {
   useEffect(() => { load(); }, [load]);
   const log = useLeadLog(() => { load(); refreshCounts(); });
 
+  // replies that were filed under the wrong project (before 1.3.1, or before their lead existed)
+  const [sorting, setSorting] = useState(false);
+  const resort = useCallback(async (quiet: boolean) => {
+    setSorting(true);
+    try {
+      const res = await fetch('/api/inbox/reroute', { method: 'POST' });
+      const d = await res.json(); if (!res.ok) throw new Error(d.error);
+      try { sessionStorage.setItem(SS_RESORT, '1'); } catch { /* ignore */ }
+      if (d.moved || d.linked) {
+        toast.success(`Replies sorted: ${d.moved} moved to their own project${d.linked ? ` · ${d.linked} linked to their lead` : ''}`);
+        load(); refreshCounts();
+      } else if (!quiet) toast.success('Every reply is already in the right project');
+    } catch (e) { if (!quiet) toast.error(e instanceof Error ? e.message : 'Could not sort replies'); }
+    finally { setSorting(false); }
+  }, [load, refreshCounts]);
+  const autoSorted = useRef(false);
+  useEffect(() => {
+    if (autoSorted.current) return;
+    autoSorted.current = true;
+    let done = false;
+    try { done = sessionStorage.getItem(SS_RESORT) === '1'; } catch { /* ignore */ }
+    if (!done) resort(true);
+  }, [resort]);
+
   const leadById = useMemo(() => { const map: Record<string, Lead> = {}; leads.forEach((l) => (map[l.id] = l)); return map; }, [leads]);
   // account filter: only mail sent from / received at the chosen address
   const scopedMsgs = useMemo(() => (sender === ALL_SENDERS ? msgs : msgs.filter((m) => messageMatchesSender(m, sender))), [msgs, sender]);
@@ -107,8 +133,15 @@ export default function InboxPage() {
   const byStep = useMemo(() => {
     const leadInRange = (l: Lead) => range.key === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
     const withSender = (l: Lead) => sender === ALL_SENDERS || !!threadByKey[`lead:${l.id}`];
+    // latest activity first: their newest reply / our newest email, then the last contact, then when added
+    const now = Date.now();
+    const at = (v: string | null | undefined) => (v ? new Date(v).getTime() || 0 : 0);
+    const activity = (l: Lead) => {
+      const t = threadByKey[`lead:${l.id}`];
+      return Math.max(t ? Math.min(stamp(t.last), now) : 0, at(l.last_contacted_at), at(l.created_at));
+    };
     const out = {} as Record<PipelineKey, Lead[]>;
-    for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l) && withSender(l));
+    for (const p of PIPELINE) out[p.key] = leads.filter((l) => (p.stages as string[]).includes(l.stage) && leadInRange(l) && withSender(l)).sort((a, b) => activity(b) - activity(a));
     return out;
   }, [leads, bounds, range, sender, threadByKey]);
 
@@ -157,7 +190,7 @@ export default function InboxPage() {
     if (confirmDelete.leadId) {
       ({ error } = await supabase.from('leads').delete().eq('id', confirmDelete.leadId));
     } else if (confirmDelete.threadKey) {
-      const ids = (threadByKey[confirmDelete.threadKey]?.messages || []).map((m) => m.id);
+      const ids = (threadByKey[confirmDelete.threadKey]?.raw || []).map((m) => m.id);
       if (ids.length) ({ error } = await supabase.from('messages').delete().in('id', ids));
     }
     setDeleting(false);
@@ -233,6 +266,9 @@ export default function InboxPage() {
             <Search size={14} className="text-faint" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="w-40 bg-transparent text-[13px] outline-none text-ink" />
           </div>
+          <button onClick={() => resort(false)} disabled={sorting} className="btn btn-ghost" title="Move replies that landed in another project's Inbox to the project of the lead they answer">
+            {sorting ? <Loader2 size={15} className="animate-spin" /> : <FolderSync size={15} />} Sort replies
+          </button>
           <button onClick={() => setLogOpen(true)} className="btn btn-ghost"><Plus size={15} /> Log a reply</button>
         </div>
       </div>
@@ -329,7 +365,7 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
                 {t.theirTurn && <span className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}><span className="live-dot" style={{ width: 5, height: 5 }} />Your turn</span>}
                 {t.lead && <span className={`stagetag s-${t.lead.stage} hidden sm:inline`}>{stageLabel(t.lead.stage)}</span>}
               </div>
-              <div className="truncate text-[12px] text-dim">{t.last.direction === 'inbound' ? '' : 'You: '}{t.last.subject ? `${t.last.subject} — ` : ''}{(t.last.body || '').replace(/\s+/g, ' ').slice(0, 120)}</div>
+              <div className="truncate text-[12px] text-dim">{t.last.direction === 'inbound' ? '' : 'You: '}{t.last.subject ? `${t.last.subject} — ` : ''}{splitQuoted(t.last.body).fresh.replace(/\s+/g, ' ').slice(0, 120)}</div>
             </div>
             <span className="hidden whitespace-nowrap text-[11px] text-faint sm:inline">{t.messages.length} msg · {t.inboundCount} from them</span>
             <span className="whitespace-nowrap text-[11.5px] text-faint">{relTime(t.last.sent_at || t.last.created_at)}</span>

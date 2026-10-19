@@ -19,15 +19,25 @@ export async function POST(req: Request) {
   if (ctx instanceof Response) return ctx;
   const { supabase, userId } = ctx;
 
-  let { messageId } = await req.json().catch(() => ({}));
-  const { leadId, text, projectId } = await req.json().catch(() => ({}));
+  // the body can only be read once
+  const input = await req.json().catch(() => ({})) as { messageId?: string; leadId?: string; text?: string; projectId?: string };
+  let { messageId } = input;
+  const { leadId, text } = input;
+  let { projectId } = input;
+  let fromEmail: string | null = null;
+  // a reply logged against a lead belongs to that lead's project
+  if (!messageId && leadId) {
+    const { data: l } = await supabase.from('leads').select('project_id, email').eq('id', leadId).maybeSingle();
+    if (l?.project_id) projectId = l.project_id;
+    fromEmail = l?.email || null;
+  }
 
   // If given raw text, first store it as an inbound message.
   if (!messageId) {
     if (!text || !projectId) return bad('messageId, or (text + projectId), required');
     const { data: created, error } = await supabase.from('messages').insert({
       project_id: projectId, owner_id: userId, lead_id: leadId || null,
-      direction: 'inbound', body: text, status: 'received',
+      direction: 'inbound', body: text, status: 'received', from_email: fromEmail, ai_meta: { manual: true, logged: true },
     }).select().single();
     if (error) return bad(error.message, 500);
     messageId = created.id;
@@ -60,7 +70,7 @@ export async function POST(req: Request) {
 
   await supabase.from('messages').update({
     category: c.category, needs_human: c.needs_human,
-    ai_meta: { confidence: c.confidence, summary: c.summary, draft: c.draft },
+    ai_meta: { ...((msg.ai_meta as Record<string, unknown>) || {}), confidence: c.confidence, summary: c.summary, draft: c.draft },
   }).eq('id', messageId);
 
   // A positive/meeting reply nudges the lead forward.

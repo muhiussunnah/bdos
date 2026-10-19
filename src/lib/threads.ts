@@ -6,7 +6,11 @@ export interface Thread {
   leadId: string | null;
   lead: Lead | null;
   counterpart: string;          // the other side's email
-  messages: Message[];          // oldest → newest
+  messages: Message[];          // oldest → newest, duplicates shown once
+  /** every stored message incl. duplicates — use for delete / link */
+  raw: Message[];
+  /** message id → how many extra copies of it were folded away */
+  copies: Record<string, number>;
   last: Message;
   first: Message;
   inboundCount: number;
@@ -31,7 +35,8 @@ export function buildThreads(messages: Message[], leadById: Record<string, Lead>
   }
   const threads: Thread[] = [];
   for (const [key, list] of map) {
-    const sorted = [...list].sort((a, b) => stamp(a) - stamp(b));
+    const raw = [...list].sort((a, b) => stamp(a) - stamp(b));
+    const { kept: sorted, copies } = foldCopies(raw);
     const last = sorted[sorted.length - 1];
     const leadId = last.lead_id || null;
     const lead = leadId ? leadById[leadId] || null : null;
@@ -39,17 +44,71 @@ export function buildThreads(messages: Message[], leadById: Record<string, Lead>
     threads.push({
       key, leadId, lead,
       counterpart: lead?.email || counterpartOf(last) || '',
-      messages: sorted, last, first: sorted[0],
+      messages: sorted, raw, copies, last, first: sorted[0],
       inboundCount: inbound.length, outboundCount: sorted.length - inbound.length,
       lastInbound: inbound.length ? inbound[inbound.length - 1] : null,
       theirTurn: last.direction === 'inbound',
     });
   }
-  return threads.sort((a, b) => stamp(b.last) - stamp(a.last));
+  // newest activity first; a drip email scheduled for later counts as "now", not the future
+  const now = Date.now();
+  return threads.sort((a, b) => Math.min(stamp(b.last), now) - Math.min(stamp(a.last), now));
 }
 
 export function stamp(m: Message): number {
   return new Date(m.sent_at || m.scheduled_at || m.created_at).getTime();
+}
+
+/**
+ * The same email stored twice — a reply that arrived and was also logged by hand,
+ * one email sent twice by a double click, two forwarded copies — is shown once
+ * with a "×2" mark. Same direction + same new text (quoted history ignored)
+ * within a week (a day for our own sends); short texts must share the subject too.
+ */
+function foldCopies(sorted: Message[]): { kept: Message[]; copies: Record<string, number> } {
+  const kept: { m: Message; text: string }[] = [];
+  const copies: Record<string, number> = {};
+  for (const m of sorted) {
+    const text = splitQuoted(m.body).fresh.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 400);
+    // a hand-logged copy is often a shortened paste of the real reply → compare as prefixes
+    const prev = text && kept.find((k) => {
+      if (k.m.direction !== m.direction || !k.text) return false;
+      const gap = stamp(m) - stamp(k.m);
+      if (Math.min(k.text.length, text.length) < 40) {
+        return k.text === text && String(k.m.subject || '').toLowerCase() === String(m.subject || '').toLowerCase() && gap <= 3600000;
+      }
+      return (k.text.startsWith(text) || text.startsWith(k.text)) && gap <= (m.direction === 'outbound' ? 86400000 : 7 * 86400000);
+    });
+    if (prev) { copies[prev.m.id] = (copies[prev.m.id] || 0) + 1; continue; }
+    kept.push({ m, text });
+  }
+  return { kept: kept.map((k) => k.m), copies };
+}
+
+/**
+ * Split an email body into what they wrote now and the quoted history under it
+ * (Outlook "Från: … Skickat: …", Gmail "Den … skrev …:", "> " lines, separators).
+ */
+export function splitQuoted(body: string | null | undefined): { fresh: string; quoted: string } {
+  const text = String(body || '').replace(/\r\n?/g, '\n');
+  const markers = [
+    /^[ \t]*_{8,}[ \t]*$/m,
+    /^[ \t]*-{2,}\s*(original message|ursprungligt meddelande|originalmeddelande|forwarded message|vidarebefordrat meddelande|ursprüngliche nachricht|videresendt melding)\s*-{2,}/im,
+    /^[ \t]*\*?(from|från|fra|von|lähettäjä)\s*:\*?[ \t]+\S[^\n]*\n(?:[^\n]*\n){0,3}?[ \t]*\*?(sent|skickat|sendt|gesendet|date|datum|to|till|an|subject|ämne|betreff)\s*:/im,
+    // "On … Albin <a@b> wrote:" / "Den … skrev Albin <\na@b>:" — the attribution may wrap onto a second line
+    /^[ \t]*(on|den|am|le|op)\s[^\n]{3,250}?(?:\n[^\n]{0,160}?)?\s(wrote|skrev|schrieb|a écrit|schreef)\s*:?[ \t]*$/im,
+    /^[ \t]*(on|den|am|le|op)\s[^\n]{3,250}?\s(wrote|skrev|schrieb|a écrit|schreef)\s[^\n]*(?:\n[^\n]{0,200})?:[ \t]*$/im,
+    /^[^\n]{0,60}\d{4}[^\n]{0,120}\s(skrev|wrote)\s[^\n]{0,200}(?:\n[^\n]{0,200})?:[ \t]*$/im,
+    /^[ \t]*>/m,
+  ];
+  let cut = -1;
+  for (const re of markers) {
+    const m = re.exec(text);
+    if (m && (cut < 0 || m.index < cut)) cut = m.index;
+  }
+  if (cut <= 0) return { fresh: text.trim(), quoted: '' };
+  const fresh = text.slice(0, cut).trim();
+  return fresh ? { fresh, quoted: text.slice(cut).trim() } : { fresh: text.trim(), quoted: '' };
 }
 
 /* ── date ranges (shared by Leads, Companies, Outreach and Inbox) ─────────────── */
