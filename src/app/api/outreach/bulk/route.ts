@@ -3,6 +3,7 @@ import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
 import { meetingFor } from '@/lib/meetings';
 import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, wrapEmailHtml, htmlToText, parseAddressList } from '@/lib/email/resend';
 import { isEmail, renderTemplate, recipientVars } from '@/lib/csv';
+import { blockedAddresses, problemLabel } from '@/lib/deliverability';
 import type { Project, Lead } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -71,6 +72,8 @@ export async function POST(req: Request) {
   }
 
   const days = P.follow_up_days?.length ? P.follow_up_days : [3, 7, 21];
+  // addresses that bounced or marked us as spam are never emailed again
+  const blocked = await blockedAddresses(supabase, userId, recipients.map((r) => String(r.email || '')));
   const attachmentNames = (attachments || []).map((a) => a.filename);
   const results: { email: string; ok: boolean; error?: string }[] = [];
 
@@ -83,6 +86,8 @@ export async function POST(req: Request) {
   for (const [i, r] of recipients.entries()) {
     const email = String(r.email || '').trim().toLowerCase();
     if (!isEmail(email)) { results.push({ email, ok: false, error: 'Invalid email' }); continue; }
+    const problem = blocked.get(email);
+    if (problem) { results.push({ email, ok: false, error: `Skipped — ${problemLabel(problem)} (${problem.at.slice(0, 10)})` }); continue; }
     const slot = dripOffset + i;
     const at = drip && slot > 0 ? new Date(dripStart + slot * drip * 60000) : null;
     const scheduled = at && at.getTime() > Date.now() + 15000 ? at : null;

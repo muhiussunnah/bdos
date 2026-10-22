@@ -5,6 +5,7 @@ import { discoveryPrompt, describeGeo } from '@/lib/ai/prompts';
 import { priorityFromScores } from '@/lib/utils';
 import { isEmail, isPhone, phoneKey } from '@/lib/csv';
 import { fetchAll, MAX_LEADS_PER_PROJECT } from '@/lib/fetchAll';
+import { verifyEmails } from '@/lib/emailCheck';
 import type { Project } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -66,10 +67,14 @@ export async function POST(req: Request) {
   const seen = new Set(existing.map((r) => String(r.email || '').toLowerCase()).filter(Boolean));
   const seenPhone = new Set(existing.map((r) => phoneKey(r.phone)).filter((k) => k.length >= 6));
   const found = result.leads || [];
-  let phoneOnly = 0;
+  // AI-found addresses are often guessed: check shape, fakes and that the domain takes mail
+  const verdicts = await verifyEmails(found.map((l) => l.email), { budgetMs: 6000 }).catch(() => new Map());
+  let phoneOnly = 0, badEmails = 0;
   const withEmail = found.filter((l) => {
     let e = String(l.email || '').trim().toLowerCase();
     if (!isEmail(e) || /example\.com$|@test\.|@email\.com$|noreply|no-reply/i.test(e)) e = '';
+    const v = e ? verdicts.get(e) : undefined;
+    if (v && !v.ok) { e = ''; badEmails++; } else if (v?.email) e = v.email;
     const p = isPhone(l.phone) ? String(l.phone).trim() : '';
     if (!e && (!p || emailOnly)) return false;
     if (e && seen.has(e)) return false;
@@ -106,8 +111,8 @@ export async function POST(req: Request) {
   if (error) return bad(error.message, 500);
 
   const phoneOnlyAdded = rows.filter((r) => !r.email).length;
-  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}${phoneOnlyAdded ? ` (${phoneOnlyAdded} phone only)` : ''}`, { droppedNoEmail, phoneOnly: phoneOnlyAdded });
-  return ok({ leads: inserted, count: inserted?.length || 0, droppedNoEmail, phoneOnly: phoneOnlyAdded });
+  await logActivity(supabase, userId, projectId, 'discovery', `Found ${inserted?.length} ${category} leads in ${area || 'region'}${phoneOnlyAdded ? ` (${phoneOnlyAdded} phone only)` : ''}${badEmails ? ` · ${badEmails} bad emails removed` : ''}`, { droppedNoEmail, phoneOnly: phoneOnlyAdded, badEmails });
+  return ok({ leads: inserted, count: inserted?.length || 0, droppedNoEmail, phoneOnly: phoneOnlyAdded, badEmails });
 }
 
 function clamp(n?: number) {

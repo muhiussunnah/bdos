@@ -160,7 +160,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
 function MessageCard({ m, counterpart, latest, copies }: { m: Message; counterpart: string; latest: boolean; copies: number }) {
   const [showQuoted, setShowQuoted] = useState(false);
   const inbound = m.direction === 'inbound';
-  const meta = (m.ai_meta || {}) as { html?: string; attachments?: string[]; summary?: string; manual?: boolean };
+  const meta = (m.ai_meta || {}) as { html?: string; attachments?: string[]; summary?: string; manual?: boolean; delivery?: string; cancelled?: boolean; bounce?: { reason?: string | null } };
   const { fresh, quoted } = meta.html ? { fresh: '', quoted: '' } : splitQuoted(m.body);
   return (
     <div className={`rounded-2xl border p-3.5 ${inbound ? 'border-line bg-surface' : 'border-[var(--accent-soft)] bg-[var(--accent-soft)]/40'} ${latest ? 'ring-2 ring-[var(--accent-soft)]' : ''}`}>
@@ -173,7 +173,12 @@ function MessageCard({ m, counterpart, latest, copies }: { m: Message; counterpa
         {!inbound && !meta.manual && <span className="rounded px-1 text-[10px] font-bold uppercase" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>agent</span>}
         {latest && <span className="rounded px-1 text-[10px] font-bold uppercase" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>latest</span>}
         {copies > 0 && <span className="rounded px-1 text-[10px] font-bold uppercase" title={`The same email is stored ${copies + 1} times — shown once`} style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>×{copies + 1}</span>}
-        {m.status === 'failed' && <span className="rounded px-1 text-[10px] font-bold uppercase" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}>failed</span>}
+        {m.status === 'failed' && (
+          <span className="rounded px-1 text-[10px] font-bold uppercase" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}
+            title={meta.bounce?.reason || undefined}>
+            {meta.delivery === 'bounced' ? 'bounced' : meta.delivery === 'complained' ? 'marked as spam' : meta.cancelled ? 'cancelled' : 'failed'}
+          </span>
+        )}
         <span className="ml-auto text-faint" title={new Date(m.sent_at || m.created_at).toLocaleString()}>{relTime(m.sent_at || m.created_at)}</span>
       </div>
       {m.subject && <div className="text-[13px] font-semibold text-ink">{m.subject}</div>}

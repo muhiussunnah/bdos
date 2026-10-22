@@ -2,13 +2,21 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Wand2, MailX } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Modal } from '@/components/ui';
 import { CsvPicker } from '@/components/CsvPicker';
 import { autoMap, rowsToLeads, isEmail, isPhone, hasContact, LEAD_FIELDS, FIELD_LABELS, type LeadField } from '@/lib/csv';
 
-type Result = { inserted: number; skipped: { row: number; reason: string }[] };
+type Result = {
+  inserted: number; skipped: { row: number; reason: string }[];
+  /** imported without their bad email */
+  cleaned: { row: number; reason: string }[];
+  fixed: { row: number; from: string; to: string }[];
+  badEmails: number; unchecked: number; verified: boolean;
+};
+/** big lists go in chunks so the email check never runs into a time limit */
+const CHUNK = 1000;
 
 /**
  * Import a custom lead list (CSV / pasted spreadsheet) into the active project.
@@ -22,7 +30,10 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
   const [mapping, setMapping] = useState<(LeadField | null)[]>([]);
   const [tag, setTag] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  /** check every email before import (fake, typo, throw-away, dead domain) */
+  const [verify, setVerify] = useState(true);
 
   function reset() { setRows(null); setName(null); setMapping([]); setResult(null); setTag(''); setHasHeader(true); }
   function close() { reset(); onClose(); }
@@ -49,19 +60,33 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
     if (!project || !leads.length) return;
     if (!usable) return toast.error(keep === 'email' ? 'No rows with a valid email — map the Email column or keep rows with a phone too' : keep === 'contact' ? 'No rows with an email or phone — map the Email or Phone column' : 'Map at least a Company or Email column');
     setBusy(true);
+    const total: Result = { inserted: 0, skipped: [], cleaned: [], fixed: [], badEmails: 0, unchecked: 0, verified: verify };
     try {
-      const res = await fetch('/api/leads/import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, leads: toImport, tag: tag.trim() || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setResult(data);
-      toast.success(`${data.inserted} leads imported`);
+      for (let at = 0; at < toImport.length; at += CHUNK) {
+        setProgress({ done: at, total: toImport.length });
+        const res = await fetch('/api/leads/import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: project.id, leads: toImport.slice(at, at + CHUNK), tag: tag.trim() || undefined, verify, keep, offset: at }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (!total.inserted) throw new Error(data.error);
+          toast.error(`Stopped after ${total.inserted} leads: ${data.error}`);
+          break;
+        }
+        total.inserted += data.inserted || 0;
+        total.skipped.push(...(data.skipped || []));
+        total.cleaned.push(...(data.cleaned || []));
+        total.fixed.push(...(data.fixed || []));
+        total.badEmails += data.checked?.badEmails || 0;
+        total.unchecked += data.checked?.unchecked || 0;
+      }
+      setResult(total);
+      toast.success(`${total.inserted} leads imported${total.badEmails ? ` · ${total.badEmails} bad emails removed` : ''}`);
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Import failed');
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setProgress(null); }
   }
 
   return (
@@ -81,6 +106,23 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
               <div className="text-[12.5px] text-dim">{result.skipped.length ? `${result.skipped.length} rows skipped` : 'Every row made it in'}</div>
             </div>
           </div>
+          {result.verified && (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Stat icon={<MailX size={15} />} color="var(--red)" n={result.badEmails} label="bad emails removed" hint="fake, mistyped, throw-away or the domain takes no mail" />
+              <Stat icon={<Wand2 size={15} />} color="var(--accent)" n={result.fixed.length} label="typos fixed" hint="e.g. gmial.com → gmail.com" />
+              <Stat icon={<ShieldCheck size={15} />} color="var(--green)" n={Math.max(0, result.inserted - result.cleaned.length)} label="leads with a checked email or phone" hint={result.unchecked ? `${result.unchecked} domains could not be checked in time and were kept` : 'every domain answered'} />
+            </div>
+          )}
+          {(result.fixed.length > 0 || result.cleaned.length > 0) && (
+            <div className="max-h-40 overflow-y-auto rounded-xl border border-line bg-surface p-3 text-[12px]">
+              {result.fixed.slice(0, 100).map((f) => (
+                <div key={`f${f.row}`} className="flex gap-2 py-0.5 text-dim"><Wand2 size={13} className="mt-0.5 flex-none text-accent" /> Row {f.row}: {f.from} → <b className="text-ink">{f.to}</b></div>
+              ))}
+              {result.cleaned.slice(0, 100).map((c) => (
+                <div key={`c${c.row}`} className="flex gap-2 py-0.5 text-dim"><MailX size={13} className="mt-0.5 flex-none text-bad" /> Row {c.row}: {c.reason}</div>
+              ))}
+            </div>
+          )}
           {result.skipped.length > 0 && (
             <div className="max-h-48 overflow-y-auto rounded-xl border border-line bg-surface-2 p-3 text-[12px]">
               {result.skipped.slice(0, 100).map((s) => (
@@ -141,6 +183,14 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
             </table>
           </div>
 
+          <label className="flex items-start gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-[12.5px]">
+            <input type="checkbox" className="mt-0.5" checked={verify} onChange={(e) => setVerify(e.target.checked)} />
+            <span>
+              <b className="inline-flex items-center gap-1 text-ink"><ShieldCheck size={13} style={{ color: 'var(--green)' }} /> Check emails before import (recommended)</b>
+              <span className="block text-dim">Removes fake and placeholder addresses, throw-away mailboxes and domains that cannot receive email, and fixes typos like gmial.com. A row with a bad email is kept without it when it has a phone{keep === 'all' ? ' or a company' : ''}. Fewer bounces = your emails keep reaching the inbox.</span>
+            </span>
+          </label>
+
           <div className="field !mb-0"><label>Tag these leads (optional)</label>
             <input className="input" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="e.g. expo-2026, old-clients" /></div>
 
@@ -149,11 +199,21 @@ export function ImportLeadsModal({ open, onClose, onDone }: { open: boolean; onC
           <div className="flex justify-end gap-2">
             <button onClick={close} className="btn btn-ghost">Cancel</button>
             <button onClick={run} disabled={busy || !usable} className="btn btn-accent">
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Import {usable} lead{usable === 1 ? '' : 's'}
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+              {busy && progress ? `${verify ? 'Checking & importing' : 'Importing'} ${Math.min(progress.done + CHUNK, progress.total)} / ${progress.total}…` : `Import ${usable} lead${usable === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>
       )}
     </Modal>
+  );
+}
+
+function Stat({ icon, color, n, label, hint }: { icon: React.ReactNode; color: string; n: number; label: string; hint: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface px-3 py-2.5" title={hint}>
+      <div className="flex items-center gap-2"><span style={{ color }}>{icon}</span><b className="text-[16px] text-ink">{n}</b></div>
+      <div className="mt-0.5 text-[11.5px] text-dim">{label}</div>
+    </div>
   );
 }

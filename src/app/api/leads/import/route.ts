@@ -1,6 +1,8 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
-import { isEmail, phoneKey } from '@/lib/csv';
+import { isEmail, isPhone, phoneKey } from '@/lib/csv';
 import { fetchAll, MAX_LEADS_PER_PROJECT } from '@/lib/fetchAll';
+import { verifyEmails, type EmailVerdict } from '@/lib/emailCheck';
+import { blockedAddresses, problemLabel } from '@/lib/deliverability';
 
 export const runtime = 'edge';
 
@@ -14,6 +16,11 @@ const MAX_ROWS = MAX_LEADS_PER_PROJECT;
 /**
  * Bulk-import leads from a user-supplied list (CSV upload / paste).
  * - Requires a company name or an email per row (company falls back to the email domain).
+ * - Checks every email first (lib/emailCheck.ts, `verify: false` turns it off): fake,
+ *   mistyped, throw-away and dead-domain addresses never enter the pipeline. The row
+ *   is still imported without the email when it has a phone (keep = contact) or a
+ *   company (keep = all); provider typos (gmial.com) are fixed.
+ * - Addresses that bounced / marked us as spam before are left out too.
  * - Skips rows whose email already exists in the project (returned as `skipped`).
  * - Imported leads enter the pipeline as `new`, exactly like AI-found ones, so
  *   automated outreach and follow-ups treat them the same way.
@@ -23,7 +30,15 @@ export async function POST(req: Request) {
   if (ctx instanceof Response) return ctx;
   const { supabase, userId } = ctx;
 
-  const { projectId, leads, tag } = await req.json().catch(() => ({})) as { projectId?: string; leads?: IncomingLead[]; tag?: string };
+  const { projectId, leads, tag, verify = true, keep: keepIn, offset: offsetIn } = await req.json().catch(() => ({})) as {
+    projectId?: string; leads?: IncomingLead[]; tag?: string; verify?: boolean;
+    /** what to do with a row whose email is bad: contact = keep it when it has a phone, email = drop it, all = keep it */
+    keep?: 'contact' | 'email' | 'all';
+    /** row number of the first lead (the modal sends big lists in chunks) */
+    offset?: number;
+  };
+  const keep = keepIn === 'email' || keepIn === 'all' ? keepIn : 'contact';
+  const offset = Math.max(0, Math.floor(Number(offsetIn) || 0));
   if (!projectId) return bad('projectId is required');
   if (!Array.isArray(leads) || !leads.length) return bad('No leads to import');
   if (leads.length > MAX_ROWS) return bad(`Import at most ${MAX_ROWS} rows at a time`);
@@ -45,20 +60,48 @@ export async function POST(req: Request) {
 
   const rows: Record<string, unknown>[] = [];
   const skipped: { row: number; reason: string }[] = [];
+  /** rows imported without their (bad) email */
+  const cleaned: { row: number; reason: string }[] = [];
+  /** provider typos fixed (gmial.com → gmail.com) */
+  const fixed: { row: number; from: string; to: string }[] = [];
   const tags = tag ? [tag.trim()].filter(Boolean) : [];
 
+  // check every address up front: shape, fakes, throw-away, typos, does the domain take mail
+  const rawEmails = leads.map((l) => clean(l.email)?.toLowerCase() || null);
+  const verdicts: Map<string, EmailVerdict> = verify ? await verifyEmails(rawEmails, { budgetMs: 14000 }) : new Map();
+  const blocked = await blockedAddresses(supabase, userId, rawEmails.filter((e): e is string => !!e)).catch(() => new Map());
+  let unchecked = 0;
+
   leads.forEach((l, i) => {
-    const email = clean(l.email)?.toLowerCase() || null;
-    if (email && !isEmail(email)) { skipped.push({ row: i + 1, reason: `Invalid email "${email}"` }); return; }
+    const row = offset + i + 1;
+    let email = rawEmails[i];
+    let dropped: string | null = null;
+    if (email) {
+      const v: EmailVerdict = verify ? verdicts.get(email) || { email, ok: true } : isEmail(email) ? { email, ok: true } : { email: null, ok: false, reason: `Invalid email "${email}"` };
+      const problem = v.ok && v.email ? blocked.get(v.email) : undefined;
+      if (!v.ok || problem) dropped = v.reason || `${email}: ${problemLabel(problem!)} before`;
+      else {
+        if (v.fixedFrom && v.email && v.email !== email) fixed.push({ row, from: email, to: v.email });
+        if (v.unchecked) unchecked++;
+        email = v.email;
+      }
+    }
+    if (dropped) {
+      // a bad address never enters the pipeline; the row itself stays when it is still useful
+      const usable = keep === 'all' ? !!clean(l.company_name) : keep === 'contact' ? isPhone(l.phone) : false;
+      if (!usable) { skipped.push({ row, reason: dropped }); return; }
+      email = null;
+    }
     let company = clean(l.company_name);
     if (!company && email) company = email.split('@')[1].replace(/\.[a-z]+$/i, '');
-    if (!company) { skipped.push({ row: i + 1, reason: 'No company or email' }); return; }
-    if (email && seen.has(email)) { skipped.push({ row: i + 1, reason: `Duplicate: ${email}` }); return; }
+    if (!company) { skipped.push({ row, reason: 'No company or email' }); return; }
+    if (email && seen.has(email)) { skipped.push({ row, reason: `Duplicate: ${email}` }); return; }
     const phone = clean(l.phone);
     const pk = phoneKey(phone);
     // phone-only rows are deduped on the number (same company, different formatting)
-    if (!email && pk.length >= 6 && seenPhone.has(pk)) { skipped.push({ row: i + 1, reason: `Duplicate phone: ${phone}` }); return; }
-    if (rows.length >= room) { skipped.push({ row: i + 1, reason: `Project limit of ${MAX_LEADS_PER_PROJECT} leads reached` }); return; }
+    if (!email && pk.length >= 6 && seenPhone.has(pk)) { skipped.push({ row, reason: `Duplicate phone: ${phone}` }); return; }
+    if (rows.length >= room) { skipped.push({ row, reason: `Project limit of ${MAX_LEADS_PER_PROJECT} leads reached` }); return; }
+    if (dropped) cleaned.push({ row, reason: `${dropped} — imported without the email` });
     if (email) seen.add(email);
     if (pk.length >= 6) seenPhone.add(pk);
     let website = clean(l.website);
@@ -67,7 +110,8 @@ export async function POST(req: Request) {
       project_id: projectId, owner_id: userId, source: 'import',
       company_name: company, contact_name: clean(l.contact_name), email, website,
       phone, role: clean(l.role), industry: clean(l.industry), location: clean(l.location),
-      linkedin_url: clean(l.linkedin_url), notes: clean(l.notes),
+      linkedin_url: clean(l.linkedin_url),
+      notes: dropped ? [clean(l.notes), `Email removed on import: ${dropped}`].filter(Boolean).join('\n') : clean(l.notes),
       fit_score: 50, opportunity_score: 50, priority: 'B', stage: 'new', tags,
     });
   });
@@ -80,6 +124,7 @@ export async function POST(req: Request) {
     inserted += data?.length || 0;
   }
 
-  if (inserted) await logActivity(supabase, userId, projectId, 'import', `Imported ${inserted} leads from a custom list`, { skipped: skipped.length });
-  return ok({ inserted, skipped });
+  const badEmails = skipped.filter((s) => !/^(Duplicate|No company|Project limit)/.test(s.reason)).length + cleaned.length;
+  if (inserted) await logActivity(supabase, userId, projectId, 'import', `Imported ${inserted} leads from a custom list${badEmails ? ` · ${badEmails} bad emails removed` : ''}`, { skipped: skipped.length, badEmails, fixed: fixed.length });
+  return ok({ inserted, skipped, cleaned, fixed, checked: { verify, badEmails, fixed: fixed.length, unchecked } });
 }

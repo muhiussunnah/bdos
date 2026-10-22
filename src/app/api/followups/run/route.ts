@@ -3,6 +3,7 @@ import { resolveAI, knowledgeFor } from '@/lib/ai/resolve';
 import { resolveEmail, sendEmail, textToHtml } from '@/lib/email/resend';
 import { completeJSON } from '@/lib/ai/providers';
 import { outreachPrompt } from '@/lib/ai/prompts';
+import { emailBlocked, checkLastEmail } from '@/lib/deliverability';
 import type { Project, Lead, Stage } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -29,7 +30,8 @@ export async function POST(req: Request) {
     .not('email', 'is', null)
     .limit(20);
 
-  const leads = (due as Lead[]) || [];
+  // never email an address that bounced or marked us as spam
+  const leads = ((due as Lead[]) || []).filter((l) => !emailBlocked(l));
   if (!leads.length) return ok({ processed: 0, results: [], message: 'No follow-ups due.' });
   if (dryRun) return ok({ processed: 0, due: leads.length, results: leads.map((l) => ({ company: l.company_name })) });
 
@@ -47,6 +49,9 @@ export async function POST(req: Request) {
   for (const lead of leads) {
     const step = Math.min(lead.followup_step + 1, 3);
     try {
+      // did the last email to them bounce? (works even when Resend's bounce webhook is not set up)
+      const problem = await checkLastEmail(supabase, email.apiKey, lead);
+      if (problem && problem !== 'soft') { results.push({ company: lead.company_name, ok: false, error: 'Last email bounced or was marked as spam — follow-ups stopped' }); continue; }
       const { system, user } = outreachPrompt(P, lead, step, knowledge);
       const draft = await completeJSON<{ subject: string; body: string }>({
         ...ai, system, messages: [{ role: 'user', content: user }], temperature: 0.85, maxTokens: 900,

@@ -1,5 +1,6 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { resolveEmail, sendEmail, textToHtml } from '@/lib/email/resend';
+import { blockedAddresses, problemLabel } from '@/lib/deliverability';
 import type { Project, Lead, Stage } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   if (!lead) return bad('Lead not found', 404);
   const L = lead as Lead;
   if (!L.email) return bad('This lead has no email address.', 422);
+  const blocked = (await blockedAddresses(supabase, userId, [L.email])).get(L.email.trim().toLowerCase());
+  if (blocked) return bad(`${L.email}: ${problemLabel(blocked)} (${blocked.at.slice(0, 10)}) — not sent. Add a new email for this lead first.`, 409);
 
   const { data: project } = await supabase.from('projects').select('*').eq('id', L.project_id).single();
   const P = project as Project;

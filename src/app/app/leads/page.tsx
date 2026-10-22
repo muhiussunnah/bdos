@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, Phone, X, ArrowRight } from 'lucide-react';
+import { Sparkles, Plus, Users, Loader2, Search, Upload, Trash2, Mail, Phone, X, ArrowRight, MailX } from 'lucide-react';
 import { ThreeDot } from '@/components/Menu';
 import { useLeadLog } from '@/components/sales/CallFlow';
 import { useApp } from '@/components/providers/AppProvider';
@@ -16,6 +16,7 @@ import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateR
 import { rangeBounds, inRange, rangeLabel } from '@/lib/threads';
 import { exportLeads } from '@/lib/export';
 import { isEmail, isPhone } from '@/lib/csv';
+import { emailBlocked } from '@/lib/deliverability';
 import { fetchAll } from '@/lib/fetchAll';
 import { STAGES } from '@/lib/utils';
 import { PIPELINE_BY_KEY, isPipelineKey, type PipelineKey } from '@/lib/pipeline';
@@ -29,6 +30,7 @@ const FILTERS = [
   { key: 'positive', label: 'Won / Active deal' },
   { key: 'import', label: 'Imported' },
   { key: 'phoneonly', label: 'Phone only' },
+  { key: 'bounced', label: 'Bounced' },
 ];
 
 /** Reachable by phone but not by email — call these. */
@@ -93,6 +95,7 @@ function LeadsInner() {
       if (filter === 'positive') return ['positive', 'meeting', 'closed'].includes(l.stage);
       if (filter === 'import') return l.source === 'import';
       if (filter === 'phoneonly') return isPhoneOnly(l);
+      if (filter === 'bounced') return !!emailBlocked(l);
       return true;
     });
     return sortBy(list, (l) => {
@@ -106,6 +109,7 @@ function LeadsInner() {
   }, [leads, q, filter, sort, stageKey, bounds]);
 
   const phoneOnlyCount = useMemo(() => leads.filter(isPhoneOnly).length, [leads]);
+  const bouncedCount = useMemo(() => leads.filter((l) => !!emailBlocked(l)).length, [leads]);
   const pager = usePager(filtered, 'leads');
   useEffect(() => { pager.reset(); }, [q, filter, sort, stageKey, range]); // eslint-disable-line react-hooks/exhaustive-deps
   const pageIds = pager.slice.map((l) => l.id);
@@ -139,10 +143,11 @@ function LeadsInner() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-[11px] border border-line bg-surface-2 p-[3px]">
           {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => pickFilter(f.key)} title={f.key === 'phoneonly' ? 'Leads with a phone number but no email — call them' : undefined}
+            <button key={f.key} onClick={() => pickFilter(f.key)} title={f.key === 'phoneonly' ? 'Leads with a phone number but no email — call them' : f.key === 'bounced' ? 'Their email bounced or they marked us as spam — Klientic never emails these addresses again' : undefined}
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-bold transition ${filter === f.key && !stageKey ? 'bg-ink text-bg' : 'text-dim'}`}>
               {f.key === 'phoneonly' && <Phone size={12} />}{f.label}
               {f.key === 'phoneonly' && <span className={`rounded-md px-1.5 text-[11px] ${filter === f.key && !stageKey ? 'bg-white/20' : 'bg-surface text-faint'}`}>{phoneOnlyCount}</span>}
+              {f.key === 'bounced' && <span className={`rounded-md px-1.5 text-[11px] ${filter === f.key && !stageKey ? 'bg-white/20' : 'bg-surface text-faint'}`}>{bouncedCount}</span>}
             </button>
           ))}
         </div>
@@ -229,6 +234,12 @@ function LeadsInner() {
                         {l.email ? (
                           <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()} title={l.email} className="flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-semibold text-ink hover:text-accent hover:underline">
                             <Mail size={12} className="flex-none text-faint" /><span>{l.email}</span>
+                            {emailBlocked(l) && (
+                              <span title={`${emailBlocked(l)!.status === 'complained' ? 'Marked our email as spam' : 'Email bounced'} on ${emailBlocked(l)!.at.slice(0, 10)} — Klientic will not email this address again`}
+                                className="inline-flex flex-none items-center gap-0.5 rounded px-1 text-[10px] font-bold uppercase" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}>
+                                <MailX size={10} />{emailBlocked(l)!.status === 'complained' ? 'spam' : 'bounced'}
+                              </span>
+                            )}
                           </a>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>no email</span>
@@ -324,7 +335,7 @@ function DiscoverModal({ open, onClose, onDone }: { open: boolean; onClose: () =
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success(`${data.count} leads added${data.phoneOnly ? ` (${data.phoneOnly} phone only)` : ''}${data.droppedNoEmail ? ` · ${data.droppedNoEmail} skipped (no ${emailOnly ? 'email' : 'email or phone'})` : ''}`);
+      toast.success(`${data.count} leads added${data.phoneOnly ? ` (${data.phoneOnly} phone only)` : ''}${data.badEmails ? ` · ${data.badEmails} fake / dead emails removed` : ''}${data.droppedNoEmail ? ` · ${data.droppedNoEmail} skipped (no ${emailOnly ? 'email' : 'email or phone'})` : ''}`);
       onDone(); onClose(); setKeywords([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Discovery failed');
@@ -384,10 +395,17 @@ function ManualModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
 
   async function save() {
     if (!project || !f.company_name) return toast.error('Company name is required');
-    const email = f.email.trim().toLowerCase();
+    let email = f.email.trim().toLowerCase();
     if (email && !isEmail(email)) return toast.error('That email address is not valid');
     if (!email && !isPhone(f.phone)) return toast.error('Add an email or a phone number — we need a way to reach them');
     setBusy(true);
+    // same check as an import: fake, typo, throw-away, dead domain, bounced before
+    if (email) {
+      const r = await fetch('/api/emails/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emails: [email] }) })
+        .then((x) => x.json()).then((d) => d.results?.[0]).catch(() => null) as { ok: boolean; email: string | null; reason?: string; fixedFrom?: string } | null;
+      if (r && !r.ok) { setBusy(false); return toast.error(`${r.reason || 'This email cannot receive mail'}. Fix it, or leave the email empty and add a phone.`); }
+      if (r?.fixedFrom && r.email) { toast.message(`Fixed a typo: ${email} → ${r.email}`); email = r.email; }
+    }
     const { error } = await supabase.from('leads').insert({
       ...f, email: email || null, phone: f.phone.trim() || null, project_id: project.id, owner_id: user.id, source: 'manual',
       fit_score: 50, opportunity_score: 50, priority: 'B', stage: 'new',

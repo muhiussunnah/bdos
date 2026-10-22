@@ -6,6 +6,7 @@ import { completeJSON } from '@/lib/ai/providers';
 import { classifyPrompt } from '@/lib/ai/prompts';
 import { rsvpFromSubject, RSVP_LABEL } from '@/lib/meetings';
 import { routeOne } from '@/lib/replyRouting';
+import { applyDeliveryProblem, resendLastEvent, type SentMessage } from '@/lib/deliverability';
 import type { Project, Lead, LeadData, ReplyCategory } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -29,6 +30,12 @@ interface ReceivedEvent {
   data: { email_id: string; from: string; to: string[]; received_for?: string[]; subject?: string; message_id?: string; attachments?: { filename: string }[] };
 }
 
+/** `email.bounced` / `email.complained` for an email we sent */
+interface DeliveryEvent {
+  type: 'email.bounced' | 'email.complained';
+  data: { email_id: string; to?: string[]; bounce?: { type?: string; subType?: string; message?: string } };
+}
+
 interface Classification {
   category: ReplyCategory; confidence: number; needs_human: boolean; summary: string;
   draft: { subject: string; body: string } | null;
@@ -47,6 +54,9 @@ export async function POST(req: Request) {
 
   let event: ReceivedEvent;
   try { event = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Bad JSON' }, { status: 400 }); }
+  if ((event?.type === 'email.bounced' || event?.type === 'email.complained') && event.data?.email_id) {
+    return deliveryEvent(event as unknown as DeliveryEvent, !!secret);
+  }
   if (event?.type !== 'email.received' || !event.data?.email_id) return ignore('not an inbound email event');
 
   const admin = createAdminClient();
@@ -170,6 +180,30 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ ok: true, messageId: created.id, leadId: lead?.id || null, category });
+}
+
+/**
+ * A sent email bounced or was marked as spam → stop emailing that lead
+ * (Disqualified, or kept for calling when it has a phone). See lib/deliverability.ts.
+ */
+async function deliveryEvent(event: DeliveryEvent, signed: boolean) {
+  const admin = createAdminClient();
+  const { data: msg } = await admin.from('messages').select('id, owner_id, lead_id, project_id, to_email, ai_meta')
+    .eq('provider_message_id', event.data.email_id).eq('direction', 'outbound').limit(1).maybeSingle();
+  if (!msg) return ignore('not an email sent from Klientic');
+  const { data: secretRow } = await admin.from('user_secrets').select('api_key').eq('owner_id', msg.owner_id).eq('provider', 'resend').maybeSingle();
+  const apiKey = secretRow?.api_key || process.env.RESEND_API_KEY || '';
+  const kind = event.type === 'email.complained' ? 'complained' : 'bounced';
+  // an unsigned event could be forged — only act when Resend itself confirms it
+  if (!signed) {
+    const last = apiKey ? await resendLastEvent(apiKey, event.data.email_id) : null;
+    if (last !== kind) return ignore('Resend does not confirm this event');
+  }
+  const b = event.data.bounce || {};
+  const action = await applyDeliveryProblem(admin, msg as SentMessage, {
+    kind, address: event.data.to?.[0] || msg.to_email, bounceType: b.type || null, reason: b.message || b.subType || null, apiKey,
+  });
+  return NextResponse.json({ ok: true, messageId: msg.id, kind, action });
 }
 
 /** Resend pings the URL when you register it; answer politely. */

@@ -67,7 +67,11 @@ export interface LeadData {
   /** latest logged note or email (calls live in last_action) */
   last_activity?: { at: string; kind: 'note' | 'email'; text: string; by: string };
   meeting?: LeadMeeting;
+  /** the current email bounced or they marked us as spam — never email it again (lib/deliverability.ts) */
+  email_status?: EmailProblem;
 }
+
+export interface EmailProblem { status: 'bounced' | 'complained'; email: string; at: string; reason?: string }
 
 export interface Lead {
   id: string;

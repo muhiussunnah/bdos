@@ -27,6 +27,20 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.3',
+    date: '2026-10-22',
+    title: 'Email check on import · bounces and spam complaints stop follow-ups',
+    tag: 'feature',
+    notes: [
+      'Import list now checks every email first (on by default): fake and placeholder addresses (test@, example.com, your.email@…), throw-away mailboxes, typos like company.con and domains that do not exist or cannot receive email are removed. Typos of the big providers are fixed (gmial.com → gmail.com). A row with a bad email is still imported when it has a phone. The result shows what was removed and fixed.',
+      'Find with AI and Add lead run the same check, so guessed or mistyped addresses never reach the pipeline.',
+      'When an email bounces or the receiver marks it as spam, Klientic now acts on it: spam complaint or bounce without a phone → the lead moves to Disqualified and follow-ups stop; bounce with a phone → the lead stays for calling but is never emailed again. Drip emails still waiting for that lead are cancelled.',
+      'Every send (automated follow-ups, Outreach, bulk / drip, Write email) refuses addresses that bounced or complained, and automated follow-ups ask Resend how the previous email went before sending the next one.',
+      'Leads → new "Bounced" filter, and a red bounced / spam mark next to the address; the conversation shows "bounced" or "marked as spam" on the email. Giving the lead a new primary email clears it.',
+      'Big imports go in chunks of 1,000 with a progress counter.',
+    ],
+  },
+  {
     version: '1.3.2',
     date: '2026-10-19',
     title: 'Sorting replies also moves your answers',

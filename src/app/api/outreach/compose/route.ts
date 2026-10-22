@@ -2,6 +2,7 @@ import { auth, bad, ok, logActivity } from '@/lib/api';
 import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
 import { resolveEmail, sendEmail, textToHtml, attachmentsFromForm, parseAddressList, wrapEmailHtml, htmlToText } from '@/lib/email/resend';
 import { isEmail } from '@/lib/csv';
+import { blockedAddresses, problemLabel } from '@/lib/deliverability';
 import type { Project, Lead } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
   if (badAddr) return bad(`"${badAddr}" is not a valid email address`);
   if (!subject) return bad('Subject is required');
   if (!body && !/<img/i.test(richHtml)) return bad('Message body is empty');
+  const blocked = await blockedAddresses(supabase, userId, to);
+  const stop = to.map((a) => a.trim().toLowerCase()).find((a) => blocked.has(a));
+  if (stop) return bad(`${stop}: ${problemLabel(blocked.get(stop)!)} (${blocked.get(stop)!.at.slice(0, 10)}) — not sent, it would hurt your sender reputation. Use another address.`, 409);
 
   const { data: project } = await supabase.from('projects').select('*').eq('id', projectId).single();
   if (!project) return bad('Project not found', 404);

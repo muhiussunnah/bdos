@@ -222,6 +222,8 @@ export async function setPrimaryContact(supabase: SupabaseClient, lead: Lead, c:
   if (old && old !== email) prev.add(old);
   prev.delete(email);
   const data: LeadData = { ...d, prev_emails: [...prev] };
+  // a new address starts clean; a bounce / spam mark belonged to the old one
+  if (data.email_status && data.email_status.email.toLowerCase() !== email) delete data.email_status;
   const patch = { email, contact_name: c.name?.trim() || lead.contact_name, role: c.role?.trim() || lead.role, phone: c.phone?.trim() || lead.phone, data, updated_at: new Date().toISOString() };
   const { error } = await supabase.from('leads').update(patch).eq('id', lead.id);
   if (error) throw new Error(explain(error));
