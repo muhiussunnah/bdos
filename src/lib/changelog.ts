@@ -27,6 +27,16 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.4',
+    date: '2026-10-24',
+    title: 'Forwarder confirmations in the Inbox · clickable links',
+    tag: 'improvement',
+    notes: [
+      'When you forward a mailbox to Klientic, the provider (Hostinger, Gmail …) sends a "confirm your forwarder" email. It now lands in the Inbox instead of being filtered out, so you can open it and click the link — no Resend dashboard needed to add a new sender.',
+      'Web links in received emails are clickable in the conversation view.',
+    ],
+  },
+  {
     version: '1.3.3',
     date: '2026-10-22',
     title: 'Email check on import · bounces and spam complaints stop follow-ups',

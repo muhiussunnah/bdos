@@ -86,9 +86,12 @@ export async function POST(req: Request) {
   if (!sender) return ignore('no sender');
   // never loop on our own bounces / auto-replies from ourselves
   if (recipients.includes(sender)) return ignore('self-addressed');
+  // a mail provider asking to confirm a forwarder to Klientic (Hostinger, Gmail …) is kept in the
+  // Inbox, so the confirmation link can be opened without the Resend dashboard
+  const forwarderCheck = isForwarderConfirmation(mail.subject || event.data.subject || '');
   // skip machine mail that is never a prospect reply (DMARC aggregate reports,
   // mailer-daemon bounces, newsletter blasts to the support address)
-  if (isAutomatedSender(sender, mail.subject || event.data.subject || '')) return ignore('automated sender');
+  if (!forwarderCheck && isAutomatedSender(sender, mail.subject || event.data.subject || '')) return ignore('automated sender');
 
   const body = (mail.text && mail.text.trim()) || htmlToText(mail.html || '') || '(empty message)';
   const subject = mail.subject || event.data.subject || null;
@@ -114,7 +117,9 @@ export async function POST(req: Request) {
   //    wrote to, a lead address quoted in the reply, the organisation's domain, the subject
   const ownRow = (settingsRows || []).find((r) => r.owner_id === owner);
   const own = [...new Set([...sendersFrom(ownRow).map((s) => s.email.toLowerCase()), ...recipients])];
-  const route = await routeOne(admin, owner, { sender, subject, body, receivedAt, own }).catch(() => ({ leadId: null, projectId: null, how: null }));
+  const route = forwarderCheck
+    ? { leadId: null, projectId: null, how: null }
+    : await routeOne(admin, owner, { sender, subject, body, receivedAt, own }).catch(() => ({ leadId: null, projectId: null, how: null }));
   let lead: Lead | null = null;
   if (route.leadId) {
     const { data } = await admin.from('leads').select('*').eq('id', route.leadId).maybeSingle();
@@ -132,9 +137,14 @@ export async function POST(req: Request) {
     project_id: projectId, owner_id: owner, lead_id: lead?.id || null,
     direction: 'inbound', status: 'received', subject, body: body.slice(0, 20000),
     from_email: sender, to_email: receivedAt, provider_message_id: emailId,
-    ai_meta: { source: 'resend', message_id: rfcId, attachments, headers_from: mail.headers?.from || null, route: route.how },
+    ai_meta: { source: 'resend', message_id: rfcId, attachments, headers_from: mail.headers?.from || null, route: route.how, ...(forwarderCheck ? { system: 'forwarder_confirmation' } : {}) },
   }).select('id').single();
   if (error || !created) return NextResponse.json({ error: error?.message || 'insert failed' }, { status: 500 });
+
+  if (forwarderCheck) {
+    await admin.from('activity_log').insert({ owner_id: owner, project_id: projectId, kind: 'inbox', message: `Mail forwarder confirmation received ("${subject || ''}") — open it in the Inbox and click the link to activate`, meta: { messageId: created.id, auto: true } });
+    return NextResponse.json({ ok: true, messageId: created.id, system: 'forwarder_confirmation' });
+  }
 
   // calendar RSVP ("Accepted: …", "Avböjt: …") → note it on the meeting; not a reply to answer
   const rsvp = rsvpFromSubject(subject);
@@ -216,6 +226,11 @@ export async function GET() {
 function extractAddress(v: string): string {
   const m = v.match(/<([^>]+)>/);
   return (m ? m[1] : v).trim().toLowerCase();
+}
+
+/** "Confirm your email forwarder request", "Gmail Forwarding Confirmation", … */
+function isForwarderConfirmation(subject: string): boolean {
+  return /forward/i.test(subject) && /(confirm|verif|activat|approv|bekräfta|godkänn)/i.test(subject);
 }
 
 function isAutomatedSender(sender: string, subject: string): boolean {

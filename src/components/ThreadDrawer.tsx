@@ -156,6 +156,14 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   );
 }
 
+/** Plain email text with its web links clickable (opens in a new tab). */
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<>"')\]]+)/g);
+  return <>{parts.map((p, i) => (i % 2 === 1
+    ? <a key={i} href={p} target="_blank" rel="noopener noreferrer nofollow" className="text-accent underline break-all">{p}</a>
+    : p))}</>;
+}
+
 /** One message. A reply shows what they wrote now; the quoted history opens on demand. */
 function MessageCard({ m, counterpart, latest, copies }: { m: Message; counterpart: string; latest: boolean; copies: number }) {
   const [showQuoted, setShowQuoted] = useState(false);
@@ -184,7 +192,7 @@ function MessageCard({ m, counterpart, latest, copies }: { m: Message; counterpa
       {m.subject && <div className="text-[13px] font-semibold text-ink">{m.subject}</div>}
       {meta.html
         ? <div className="rte-preview mt-1 text-ink" dangerouslySetInnerHTML={{ __html: meta.html }} />
-        : <div className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{fresh}</div>}
+        : <div className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink"><Linkified text={fresh} /></div>}
       {quoted && (
         <div className="mt-2">
           <button onClick={() => setShowQuoted((v) => !v)} className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-dim hover:text-ink">
