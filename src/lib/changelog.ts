@@ -27,6 +27,16 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.5',
+    date: '2026-10-26',
+    title: 'Mail that is not a reply goes to the project of the address it was sent to',
+    tag: 'improvement',
+    notes: [
+      'Email that is not about a lead — an account verification, a newsletter, a supplier — now lands in the project that sends from the address it arrived at, instead of the first project. Mail to albin@famies.app goes to OutReach PR, because OutReach PR sends from albin@famies.app. "Sort replies" moves what already arrived.',
+      'Sorting replies only brings along the answers you wrote after their reply — older emails to the same address stay where they are.',
+    ],
+  },
+  {
     version: '1.3.4',
     date: '2026-10-24',
     title: 'Forwarder confirmations in the Inbox · clickable links',

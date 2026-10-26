@@ -12,6 +12,8 @@ import { fetchAll } from '@/lib/fetchAll';
  *   3. a lead address quoted in the reply ("Till: kommun@sater.se")
  *   4. a lead on the same organisation domain (never gmail / outlook / …)
  *   5. the subject of an email we sent ("Sv: Bolla en idé med Albin")
+ *   6. not about a lead at all (a newsletter, an account-verification mail): the project that
+ *      sends from the address it arrived at (albin@famies.app → OutReach PR)
  * When several leads qualify, the one whose outreach has the same subject and
  * went out from the address that received the reply wins.
  * Nothing found → the caller falls back to the default project.
@@ -20,7 +22,7 @@ import { fetchAll } from '@/lib/fetchAll';
 export interface RouteLead { id: string; project_id: string; email: string | null; website: string | null; last_contacted_at: string | null; prev?: string[] | null }
 export interface RouteOut { lead_id: string | null; project_id: string; to_email: string | null; from_email: string | null; subject: string | null; sent_at?: string | null; created_at: string }
 export interface RouteReply { sender: string; subject: string | null; body: string | null; receivedAt: string | null; own: string[] }
-export type RouteHow = 'email' | 'sent' | 'quoted' | 'domain' | 'subject';
+export type RouteHow = 'email' | 'sent' | 'quoted' | 'domain' | 'subject' | 'identity';
 export interface Route { leadId: string | null; projectId: string | null; how: RouteHow | null }
 
 // ── address helpers ─────────────────────────────────────────────────────────
@@ -114,14 +116,17 @@ export function buildRoutingIndex(leads: RouteLead[], outs: RouteOut[]) {
   }
   const outsByLead = new Map<string, RouteOut[]>();
   const outsByAddr = new Map<string, RouteOut[]>();
+  const outsByFrom = new Map<string, RouteOut[]>(); // our sending address → what it sent
   const outSubjects: { o: RouteOut; base: string }[] = [];
   for (const o of outs) {
     if (o.lead_id) push(outsByLead, o.lead_id, o);
     addrList(o.to_email).forEach((a) => push(outsByAddr, a, o));
+    const from = norm(o.from_email);
+    if (from.includes('@')) push(outsByFrom, from, o);
     const base = subjectBase(o.subject);
     if (base.length >= 5) outSubjects.push({ o, base });
   }
-  return { leadById, byEmail, byDomain, byTenant, outsByLead, outsByAddr, outSubjects };
+  return { leadById, byEmail, byDomain, byTenant, outsByLead, outsByAddr, outsByFrom, outSubjects };
 }
 
 export function routeReply(r: RouteReply, ix: RoutingIndex): Route {
@@ -195,6 +200,19 @@ export function routeReply(r: RouteReply, ix: RoutingIndex): Route {
     if (projects.size === 1) return { leadId: null, projectId: hits[0].project_id, how: 'subject' };
   }
 
+  // 6. about no lead: the project that mostly sends from the receiving address (ties → most recent)
+  const mine = receivedAt ? ix.outsByFrom.get(receivedAt) || [] : [];
+  if (mine.length) {
+    const per = new Map<string, { n: number; last: string }>();
+    for (const o of mine) {
+      const p = per.get(o.project_id) || { n: 0, last: '' };
+      p.n++; if (outAt(o) > p.last) p.last = outAt(o);
+      per.set(o.project_id, p);
+    }
+    const [home] = [...per.entries()].sort((a, b) => b[1].n - a[1].n || (b[1].last > a[1].last ? 1 : b[1].last < a[1].last ? -1 : 0));
+    return { leadId: null, projectId: home[0], how: 'identity' };
+  }
+
   return { leadId: null, projectId: null, how: null };
 }
 
@@ -229,7 +247,8 @@ export async function routeOne(supabase: SupabaseClient, ownerId: string, r: Rou
   const outsQ = () => supabase.from('messages').select(OUT_COLS).eq('owner_id', ownerId).eq('direction', 'outbound');
   type Res<T> = PromiseLike<{ data: T[] | null }>;
   const none = Promise.resolve({ data: [] as never[] });
-  const [exact, prev, sent, qLeads, qOuts, domEmail, domSite, subj, recent] = await Promise.all([
+  const at = norm(r.receivedAt);
+  const [exact, prev, sent, qLeads, qOuts, domEmail, domSite, subj, recent, fromHere] = await Promise.all([
     leadsQ().ilike('email', likeEsc(sender)).limit(50) as Res<RouteLead>,
     leadsQ().filter('data->prev_emails', 'cs', JSON.stringify([sender])).limit(50) as Res<RouteLead>,
     outsQ().ilike('to_email', `%${likeEsc(sender)}%`).order('created_at', { ascending: false }).limit(100) as Res<RouteOut>,
@@ -240,6 +259,8 @@ export async function routeOne(supabase: SupabaseClient, ownerId: string, r: Rou
     base.length >= 5 ? outsQ().ilike('subject', `%${likeEsc(base)}%`).order('created_at', { ascending: false }).limit(500) as Res<RouteOut> : none,
     // "Tack för att du kontaktat oss angående <our subject>" contains our subject — check recent sends too
     base.length >= 5 ? outsQ().order('created_at', { ascending: false }).limit(1000) as Res<RouteOut> : none,
+    // what the receiving address sends — its home project is the last resort
+    at.includes('@') ? outsQ().ilike('from_email', `%${likeEsc(at)}%`).order('created_at', { ascending: false }).limit(1000) as Res<RouteOut> : none,
   ]);
 
   const leadMap = new Map<string, RouteLead>();
@@ -248,6 +269,6 @@ export async function routeOne(supabase: SupabaseClient, ownerId: string, r: Rou
   // the outreach history of every candidate, for ranking
   const ids = leads.map((l) => l.id).slice(0, 300);
   const { data: leadOuts } = ids.length ? await outsQ().in('lead_id', ids).limit(2000) : { data: [] };
-  const outs = [...(sent.data || []), ...(qOuts.data || []), ...(subj.data || []), ...(recent.data || []), ...((leadOuts as RouteOut[] | null) || [])];
+  const outs = [...(sent.data || []), ...(qOuts.data || []), ...(subj.data || []), ...(recent.data || []), ...(fromHere.data || []), ...((leadOuts as RouteOut[] | null) || [])];
   return routeReply(r, buildRoutingIndex(leads, outs));
 }
