@@ -147,6 +147,8 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
           </div>
         </div>
       }>
+      {/* newest-first opens here: the "someone else answered" banner and the lead box stay in view */}
+      <div ref={topRef} />
       {!lead && thread.counterpart && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line bg-surface-2 px-3.5 py-2.5 text-[12.5px] text-dim">
           <span className="min-w-0 flex-1">Not linked to a lead — {thread.counterpart} may be a decision maker replying from another address.</span>
@@ -179,7 +181,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
           )}
         </div>
       )}
-      <div ref={topRef} className="mb-2.5 flex flex-wrap items-center gap-2 text-[11.5px] text-faint">
+      <div className="mb-2.5 flex flex-wrap items-center gap-2 text-[11.5px] text-faint">
         <span>{messages.length} message{messages.length === 1 ? '' : 's'}{hidden > 0 ? ` · ${hidden} duplicate${hidden === 1 ? '' : 's'} shown once` : ''}</span>
         <div className="ml-auto inline-flex rounded-lg border border-line bg-surface p-0.5">
           {(['newest', 'oldest'] as Order[]).map((o) => (

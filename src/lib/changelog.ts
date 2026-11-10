@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.8',
+    date: '2026-11-10',
+    title: 'Conversations open at the top',
+    tag: 'fix',
+    notes: [
+      'A conversation now opens at the very top, so the "… answered — Make primary contact" notice and the lead details are visible straight away, with the newest message right below.',
+    ],
+  },
+  {
     version: '1.3.7',
     date: '2026-11-10',
     title: 'Answers go to the person who wrote · "Make primary contact" is back',
