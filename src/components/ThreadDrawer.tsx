@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus, CalendarPlus, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus, CalendarPlus, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, UserCheck } from 'lucide-react';
+import { useApp } from '@/components/providers/AppProvider';
 import { Drawer } from '@/components/ui';
-import { LinkLeadModal, useLeadLog } from '@/components/sales/CallFlow';
+import { LinkLeadModal, useLeadLog, useSalesperson } from '@/components/sales/CallFlow';
+import { addrOf, nameFromEmail, otherReplier, setPrimaryContact } from '@/lib/sales';
 import { relTime } from '@/lib/utils';
 import { PIPELINE, stepOf, stageLabel } from '@/lib/pipeline';
 import { splitQuoted, type Thread } from '@/lib/threads';
@@ -30,6 +32,10 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   onDeleteThread?: (threadKey: string) => void;
 }) {
   const log = useLeadLog(onChange);
+  const { supabase } = useApp();
+  const { by } = useSalesperson(thread?.lead || null);
+  const [replyTo, setReplyTo] = useState('');
+  const [making, setMaking] = useState(false);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState(false);
@@ -39,7 +45,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
 
   useEffect(() => { try { if (localStorage.getItem(LS_ORDER) === 'oldest') setOrder('oldest'); } catch { /* ignore */ } }, []);
   const pickOrder = (o: Order) => { setOrder(o); try { localStorage.setItem(LS_ORDER, o); } catch { /* ignore */ } };
-  useEffect(() => { setReply(''); setLink(false); }, [thread?.key]);
+  useEffect(() => { setReply(''); setLink(false); setReplyTo(''); }, [thread?.key]);
   // open on the latest message: the top when newest-first, the bottom when oldest-first
   useEffect(() => {
     const t = setTimeout(() => (order === 'newest' ? topRef.current?.scrollIntoView({ block: 'start' }) : endRef.current?.scrollIntoView({ block: 'end' })), 80);
@@ -54,6 +60,22 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
   const subjectBase = (messages.find((m) => m.subject)?.subject || '').replace(/^(re|sv|fwd?):\s*/i, '');
   const title = lead?.company_name || thread.counterpart || 'Conversation';
   const currentStep = lead ? stepOf(lead.stage).key : null;
+  // someone else at the organisation answered (Olof.Sprang@… for biblioteket@…)
+  const replier = otherReplier(lead, thread.lastInbound?.from_email);
+  const primary = addrOf(lead?.email);
+  const replyOptions = [...new Set([addrOf(thread.lastInbound?.from_email), primary].filter((e) => e.includes('@')))];
+  const to = replyTo || replyOptions[0] || '';
+
+  async function makePrimary() {
+    if (!lead || !replier) return;
+    setMaking(true);
+    try {
+      await setPrimaryContact(supabase, lead, { email: replier, name: nameFromEmail(replier) || undefined }, by);
+      toast.success(`${replier} is now the primary contact · ${primary || 'the old address'} is kept`);
+      setReplyTo(''); onChange();
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update the contact'); }
+    finally { setMaking(false); }
+  }
 
   async function send() {
     if (!reply.trim()) return toast.error('Write a reply');
@@ -61,7 +83,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
     try {
       const subject = subjectBase ? `Re: ${subjectBase}` : `Re: ${title}`;
       if (thread!.lastInbound) {
-        const res = await fetch('/api/inbox/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageId: thread!.lastInbound.id, subject, body: reply }) });
+        const res = await fetch('/api/inbox/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageId: thread!.lastInbound.id, subject, body: reply, to: to || undefined }) });
         const d = await res.json(); if (!res.ok) throw new Error(d.error);
       } else {
         if (!thread!.leadId && !thread!.counterpart) throw new Error('No recipient');
@@ -72,7 +94,7 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
         const d = await res.json(); if (!res.ok) throw new Error(d.error);
       }
       // the API moves an Outreach-sent / Follow-up lead forward (next action +7 days)
-      toast.success('Reply sent'); setReply(''); onChange();
+      toast.success(to ? `Reply sent to ${to}` : 'Reply sent'); setReply(''); onChange();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Send failed'); }
     finally { setBusy(false); }
   }
@@ -82,6 +104,16 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
       sub={`${thread.counterpart}${lead?.contact_name ? ` · ${lead.contact_name}` : ''} · ${messages.length} message${messages.length === 1 ? '' : 's'}`}
       footer={
         <div className="space-y-2.5">
+          {thread.lastInbound && to && (
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-dim">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-faint">Reply to</span>
+              {replyOptions.length > 1 ? (
+                <select className="input !w-auto !py-1 !text-[12.5px]" value={to} onChange={(e) => setReplyTo(e.target.value)} aria-label="Reply to">
+                  {replyOptions.map((o) => <option key={o} value={o}>{o}{o === addrOf(thread.lastInbound?.from_email) ? ' — wrote last' : ''}{o === primary ? ' — primary contact' : ''}</option>)}
+                </select>
+              ) : <b className="text-ink">{to}</b>}
+            </div>
+          )}
           <textarea className="input min-h-[96px]" value={reply} onChange={(e) => setReply(e.target.value)} placeholder={thread.theirTurn ? 'Answer them…' : 'Send a follow-up…'} />
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={send} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send reply</button>
@@ -120,6 +152,17 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
           <span className="min-w-0 flex-1">Not linked to a lead — {thread.counterpart} may be a decision maker replying from another address.</span>
           <button onClick={() => setLink(true)} className="btn btn-ghost btn-sm"><Link2 size={13} /> Link to a lead</button>
           <LinkLeadModal open={link} onClose={() => setLink(false)} onDone={onChange} projectId={messages[0].project_id} messageIds={thread.raw.map((m) => m.id)} counterpart={thread.counterpart} />
+        </div>
+      )}
+      {lead && replier && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-dashed px-3.5 py-2.5 text-[12.5px] text-dim" style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}>
+          <span className="min-w-0 flex-1">
+            <b className="text-ink">{replier}</b> answered — not the lead&rsquo;s primary email{primary ? <> (<span className="text-ink">{primary}</span>)</> : null}.
+            Make them the primary contact so Write email and follow-ups go to them too; the old address is kept.
+          </span>
+          <button onClick={makePrimary} disabled={making} className="btn btn-accent btn-sm">
+            {making ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />} Make primary contact
+          </button>
         </div>
       )}
       {lead && (

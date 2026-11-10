@@ -214,6 +214,28 @@ export async function logCallStart(supabase: SupabaseClient, lead: Lead, by: str
 }
 
 /** Replace the general address with the decision maker. The old address is kept in data.prev_emails and the history. */
+/** "Olof.Sprang@x.se" → "Olof.Sprang@x.se" lower-cased, "A <a@x>" → "a@x" */
+export function addrOf(v: string | null | undefined): string {
+  const s = String(v || '').trim().toLowerCase();
+  const m = s.match(/<([^>]+)>/);
+  return (m ? m[1] : s).trim();
+}
+
+/** A person's name from a personal address: olof.sprang@… → "Olof Sprang"; info@… → '' */
+export function nameFromEmail(email: string | null | undefined): string {
+  const local = addrOf(email).split('@')[0] || '';
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length < 2 || parts.length > 3 || !parts.every((p) => /^[a-zåäöéü]{2,}$/i.test(p))) return '';
+  return parts.map((p) => p[0].toUpperCase() + p.slice(1)).join(' ');
+}
+
+/** The person who wrote their latest reply, when that is not the lead's primary email. */
+export function otherReplier(lead: Pick<Lead, 'email'> | null | undefined, lastInboundFrom: string | null | undefined): string | null {
+  const who = addrOf(lastInboundFrom);
+  if (!lead || !who.includes('@') || who === addrOf(lead.email)) return null;
+  return who;
+}
+
 export async function setPrimaryContact(supabase: SupabaseClient, lead: Lead, c: { email: string; name?: string; role?: string; phone?: string }, by: string): Promise<void> {
   const email = c.email.trim().toLowerCase();
   const d = leadData(lead);

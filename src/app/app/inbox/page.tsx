@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
   Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2,
-  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync, Folder, FolderInput, FolderPlus, X,
+  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync, Folder, FolderInput, FolderPlus, X, UserCheck,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal, Avatar } from '@/components/ui';
@@ -18,7 +18,8 @@ import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { ThreeDot, type MenuItem } from '@/components/Menu';
 import { useInboxFolders, FolderBar, DRAG_TYPE, type InboxFoldersApi } from '@/components/InboxFolders';
 import { LeadFront } from '@/components/sales/LeadFront';
-import { useLeadLog } from '@/components/sales/CallFlow';
+import { useLeadLog, useSalesperson } from '@/components/sales/CallFlow';
+import { nameFromEmail, otherReplier, setPrimaryContact } from '@/lib/sales';
 import { LeadPicker } from '@/components/LeadPicker';
 import { SenderFilter, useSenderFilter, messageMatchesSender, ownAddressOf, ALL_SENDERS } from '@/components/SenderFilter';
 import { DateRangeSelect, ExportButton, useDateFilter } from '@/components/DateRange';
@@ -80,6 +81,7 @@ export default function InboxPage() {
   }, []);
   // Inbox folders: null = the main Inbox, otherwise the open folder
   const fx = useInboxFolders();
+  const { by } = useSalesperson(null);
   const [folder, setFolder] = useState<string | null>(null);
   const pickStage = (s: StageKey) => { setStage(s); setFolder(null); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
 
@@ -178,11 +180,22 @@ export default function InboxPage() {
   if (!project) return <Thinking label="Loading…" />;
 
   /** Three-dot menu: the move actions use exactly the names on the stage cards. */
+  /** someone else at the organisation answered → make that address the primary contact (old one kept) */
+  async function makePrimary(lead: Lead, email: string) {
+    try {
+      await setPrimaryContact(supabase, lead, { email, name: nameFromEmail(email) || undefined }, by);
+      toast.success(`${email} is now the primary contact of ${lead.company_name} · ${lead.email || 'the old address'} is kept`);
+      load(); refreshCounts();
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update the contact'); }
+  }
+
   const menuFor = (leadId: string | null | undefined, threadK?: string | null) => {
     const lead = leadId ? leadById[leadId] : null;
     const current = lead ? stepOf(lead.stage).key : null;
+    const replier = threadK ? otherReplier(lead, threadByKey[threadK]?.lastInbound?.from_email) : null;
     return [
       ...(threadK ? [{ label: 'Open conversation', icon: <MessagesSquare size={14} />, run: () => setThreadKey(threadK) }] : []),
+      ...(lead && replier ? [{ label: `Make ${replier} primary contact`, icon: <UserCheck size={14} />, run: () => makePrimary(lead, replier) }] : []),
       ...(lead?.email ? [{ label: 'Write email', icon: <PenLine size={14} />, run: () => setComposeLead(lead) }] : []),
       ...(lead ? log.items(lead) : []),
       ...PIPELINE.filter((p) => p.key !== 'lead' && p.key !== current).map((p) => ({

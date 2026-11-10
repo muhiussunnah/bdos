@@ -27,6 +27,17 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.7',
+    date: '2026-11-10',
+    title: 'Answers go to the person who wrote · "Make primary contact" is back',
+    tag: 'fix',
+    notes: [
+      'Fixed: answering a conversation sent the email to the lead’s primary address (e.g. Biblioteket@Upplands-Bro.se) even when someone else (Olof.Sprang@…) had written. The answer now goes to whoever wrote the latest reply, like in any mail program. "Reply to" above the box shows the address and lets you pick the primary contact instead.',
+      'When someone else at the organisation answers, the conversation shows "Olof.Sprang@… answered — not the lead’s primary email" with a Make primary contact button, and the ⋮ menu has "Make … primary contact". The old address is kept, the name is filled in from the address when it is personal (olof.sprang → Olof Sprang). This replaces the Link button that disappeared once Klientic started linking such replies to the lead by itself.',
+      'Answers are not sent to an address that bounced or marked us as spam.',
+    ],
+  },
+  {
     version: '1.3.6',
     date: '2026-11-10',
     title: 'Inbox folders · the agent never emails on its own',

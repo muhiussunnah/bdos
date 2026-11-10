@@ -1,6 +1,9 @@
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { resolveEmail, sendEmail, textToHtml } from '@/lib/email/resend';
 import { touchLeadAfterEmail, senderName } from '@/lib/email/afterSend';
+import { isEmail } from '@/lib/csv';
+import { addrOf } from '@/lib/sales';
+import { blockedAddresses, problemLabel } from '@/lib/deliverability';
 import type { Lead } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -11,7 +14,7 @@ export async function POST(req: Request) {
   if (ctx instanceof Response) return ctx;
   const { supabase, userId } = ctx;
 
-  const { messageId, subject, body } = await req.json().catch(() => ({}));
+  const { messageId, subject, body, to: toIn } = await req.json().catch(() => ({}));
   if (!messageId || !subject || !body) return bad('messageId, subject and body are required');
 
   const { data: inbound } = await supabase.from('messages').select('*').eq('id', messageId).single();
@@ -20,8 +23,14 @@ export async function POST(req: Request) {
   const { data: lead } = inbound.lead_id
     ? await supabase.from('leads').select('*').eq('id', inbound.lead_id).single()
     : { data: null };
-  const to = (lead as Lead)?.email || inbound.from_email;
+  // like any mail program: the answer goes to whoever wrote (Olof.Sprang@… answering mail sent to
+  // biblioteket@… gets the reply himself) — or to the address picked under "Reply to"
+  const picked = typeof toIn === 'string' && isEmail(toIn.trim()) ? toIn.trim().toLowerCase() : null;
+  const replier = isEmail(addrOf(inbound.from_email)) ? addrOf(inbound.from_email) : null;
+  const to = picked || replier || (lead as Lead)?.email || null;
   if (!to) return bad('No recipient address for this reply.', 422);
+  const blocked = (await blockedAddresses(supabase, userId, [to]).catch(() => new Map())).get(to.toLowerCase());
+  if (blocked) return bad(`${to}: ${problemLabel(blocked)} (${blocked.at.slice(0, 10)}) — not sent. Pick another address.`, 409);
 
   // reply from whichever of the user's identities received the message (falls back to the default)
   const resolved = await resolveEmail(supabase, userId);
