@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     lead_id: leadId, project_id: L.project_id, owner_id: userId, direction: 'outbound',
     subject, body, status: 'sent', to_email: L.email, from_email: from,
     provider_message_id: providerId, sent_at: new Date().toISOString(),
+    ai_meta: { agent: true, mode: 'sequence', step },
   });
 
   // advance the pipeline + schedule the next follow-up

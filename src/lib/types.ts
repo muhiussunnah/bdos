@@ -67,6 +67,8 @@ export interface LeadData {
   /** latest logged note or email (calls live in last_action) */
   last_activity?: { at: string; kind: 'note' | 'email'; text: string; by: string };
   meeting?: LeadMeeting;
+  /** ticked "Let the agent run automated follow-ups" when emailing — the agent may follow up (lib/automation.ts) */
+  auto_followups?: boolean;
   /** the current email bounced or they marked us as spam — never email it again (lib/deliverability.ts) */
   email_status?: EmailProblem;
 }

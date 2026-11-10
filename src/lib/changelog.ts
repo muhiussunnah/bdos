@@ -27,6 +27,19 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.6',
+    date: '2026-11-10',
+    title: 'Inbox folders · the agent never emails on its own',
+    tag: 'feature',
+    notes: [
+      'Inbox folders: create folders (e.g. "Auto replies"), drag a conversation onto a folder to move it, drag it onto "Inbox" to bring it back. Tick several conversations to move them together, or use ⋮ → Move to. Folders can be renamed and deleted (their conversations return to the Inbox). A conversation in a folder comes back to the Inbox by itself when they write again.',
+      'Agent follow-up emails are now OFF by default for the whole account (Autopilot → Agent follow-up emails). While off, "Run all due follow-ups" / "Send due follow-ups" send nothing — every email goes out only because a person pressed Send.',
+      'When switched on, the agent only follows up leads that were opted in ("Let the agent run automated follow-ups" ticked when they were emailed). Leads in the call loop are never emailed by the agent just because their next-action date is due. In Write email the box now starts unticked.',
+      'Fixed: an answer written in the conversation view was labelled AGENT and counted as "By the agent". It is now marked as sent by you — also for the answers sent before (matched with their "Replied to …" history).',
+      'Saving settings no longer overwrites other settings saved in another tab.',
+    ],
+  },
+  {
     version: '1.3.5',
     date: '2026-10-26',
     title: 'Mail that is not a reply goes to the project of the address it was sent to',

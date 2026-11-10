@@ -30,6 +30,8 @@ export async function touchLeadAfterEmail(supabase: SupabaseClient, lead: Lead, 
     stage = 'contacted';
     next = o.startFollowups ? new Date(new Date(at).getTime() + days[0] * 86400000).toISOString() : null;
     patch.stage = stage; patch.followup_step = 0; patch.next_action_at = next;
+    // the agent may only follow up by itself when the sender ticked the box (lib/automation.ts)
+    data.auto_followups = !!o.startFollowups;
   } else if (QUEUE_STAGES.includes(lead.stage)) {
     const attempts = attemptsOf(lead) + 1;
     data.attempts = attempts;

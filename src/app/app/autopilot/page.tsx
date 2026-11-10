@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Sparkles, Send, Clock, BarChart3, ListChecks, Loader2, Zap, ArrowRight } from 'lucide-react';
+import { Sparkles, Send, Clock, BarChart3, ListChecks, Loader2, Zap, ArrowRight, ShieldCheck, Bot } from 'lucide-react';
+import { useDialogs } from '@/components/providers/DialogProvider';
+import { agentFollowupsOn, optedIn, setAgentFollowups } from '@/lib/automation';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, Thinking } from '@/components/ui';
 import { Hero } from '@/components/Hero';
@@ -14,7 +16,21 @@ import type { Lead } from '@/lib/types';
 interface Activity { id: string; kind: string; message: string; created_at: string }
 
 export default function AutopilotPage() {
-  const { project, supabase } = useApp();
+  const { project, supabase, settings, refreshSettings, user } = useApp();
+  const { confirm } = useDialogs();
+  const agentOn = agentFollowupsOn(settings?.data);
+  const [switching, setSwitching] = useState(false);
+  async function toggleAgent() {
+    if (!agentOn && !(await confirm({
+      title: 'Let the agent send follow-ups by itself?',
+      body: 'When you press "Send due follow-ups", the agent writes and sends an email to every due lead that was opted in ("Let the agent run automated follow-ups" ticked when it was emailed). Leads you only call or email yourself are never touched.',
+      confirmLabel: 'Turn on', danger: false,
+    }))) return;
+    setSwitching(true);
+    try { await setAgentFollowups(supabase, user.id, !agentOn); await refreshSettings(); toast.success(agentOn ? 'Agent follow-ups turned off — the agent sends nothing by itself' : 'Agent follow-ups turned on'); }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); }
+    finally { setSwitching(false); }
+  }
   const [activity, setActivity] = useState<Activity[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [running, setRunning] = useState<string | null>(null);
@@ -59,12 +75,14 @@ export default function AutopilotPage() {
   if (!project) return <Thinking label="Loading…" />;
 
   const nowIso = new Date().toISOString();
-  const dueFollowups = leads.filter((l) => l.next_action_at && l.next_action_at <= nowIso && ['contacted', 'followup1', 'followup2'].includes(l.stage)).length;
+  const dueFollowups = leads.filter((l) => optedIn(l) && l.next_action_at && l.next_action_at <= nowIso && ['contacted', 'followup1', 'followup2'].includes(l.stage)).length;
   const newLeads = leads.filter((l) => l.stage === 'new').length;
 
   const actions = [
     { key: 'discover', icon: <Sparkles size={18} />, title: 'Find new leads', desc: `${newLeads} in pipeline · hunt more`, href: '/app/leads?discover=1' as const, run: null },
-    { key: 'followups', icon: <Clock size={18} />, title: 'Send due follow-ups', desc: dueFollowups > 0 ? `${dueFollowups} follow-ups are due now` : 'Nothing due right now', run: runFollowups },
+    { key: 'followups', icon: <Clock size={18} />, title: 'Send due follow-ups',
+      desc: !agentOn ? 'Off — the agent sends no email by itself' : dueFollowups > 0 ? `${dueFollowups} opted-in follow-ups are due now` : 'Nothing due right now',
+      run: agentOn ? runFollowups : () => toast.message('Agent follow-ups are off. Turn them on above first.') },
     { key: 'report', icon: <BarChart3 size={18} />, title: "Generate today's report", desc: 'Numbers + top opportunities', run: runReport },
     { key: 'tasks', icon: <ListChecks size={18} />, title: 'Build the call list', desc: 'Prioritised tasks from the pipeline', href: '/app/tasks' as const, run: null },
   ];
@@ -83,6 +101,23 @@ export default function AutopilotPage() {
           </span>
         </div>
       </Hero>
+
+      <Card className="flex flex-wrap items-center gap-3.5">
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-xl" style={{ background: agentOn ? 'var(--accent-soft)' : 'var(--green-soft)', color: agentOn ? 'var(--accent)' : 'var(--green)' }}>
+          {agentOn ? <Bot size={18} /> : <ShieldCheck size={18} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-extrabold text-ink">Agent follow-up emails: {agentOn ? 'ON' : 'OFF'}</div>
+          <div className="text-[12.5px] text-dim">
+            {agentOn
+              ? 'The agent may write and send follow-ups — only to leads that were opted in ("Let the agent run automated follow-ups" ticked when emailing them).'
+              : 'The agent never sends an email by itself. Every email goes out because someone pressed Send — replies, compose, lists.'}
+          </div>
+        </div>
+        <button onClick={toggleAgent} disabled={switching} className={`btn ${agentOn ? 'btn-ghost' : 'btn-accent'}`}>
+          {switching && <Loader2 size={14} className="animate-spin" />} {agentOn ? 'Turn off' : 'Turn on'}
+        </button>
+      </Card>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {actions.map((a) => {

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
   Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2,
-  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync,
+  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync, Folder, FolderInput, FolderPlus, X,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal, Avatar } from '@/components/ui';
@@ -15,7 +15,8 @@ import { ComposeModal } from '@/components/ComposeModal';
 import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
-import { ThreeDot } from '@/components/Menu';
+import { ThreeDot, type MenuItem } from '@/components/Menu';
+import { useInboxFolders, FolderBar, DRAG_TYPE, type InboxFoldersApi } from '@/components/InboxFolders';
 import { LeadFront } from '@/components/sales/LeadFront';
 import { useLeadLog } from '@/components/sales/CallFlow';
 import { LeadPicker } from '@/components/LeadPicker';
@@ -77,7 +78,10 @@ export default function InboxPage() {
   useEffect(() => {
     try { const s = localStorage.getItem(LS_STAGE) as StageKey | null; if (s && ALL_KEYS.includes(s)) setStage(s); } catch { /* ignore */ }
   }, []);
-  const pickStage = (s: StageKey) => { setStage(s); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
+  // Inbox folders: null = the main Inbox, otherwise the open folder
+  const fx = useInboxFolders();
+  const [folder, setFolder] = useState<string | null>(null);
+  const pickStage = (s: StageKey) => { setStage(s); setFolder(null); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -128,7 +132,15 @@ export default function InboxPage() {
   const bounds = useMemo(() => rangeBounds(range), [range]);
 
   // ── buckets (all respect the date range) ──
-  const inboxThreads = useMemo(() => threads.filter((t) => t.inboundCount > 0 && inRange(t.last.sent_at || t.last.created_at, bounds)), [threads, bounds]);
+  const repliedThreads = useMemo(() => threads.filter((t) => t.inboundCount > 0 && inRange(t.last.sent_at || t.last.created_at, bounds)), [threads, bounds]);
+  // a conversation moved into a folder leaves the Inbox (and "Waiting") until they write again
+  const inboxThreads = useMemo(() => repliedThreads.filter((t) => !fx.folderOf(t)), [repliedThreads, fx.folderOf]);
+  const folderThreads = useMemo(() => {
+    const m: Record<string, Thread[]> = {};
+    repliedThreads.forEach((t) => { const f = fx.folderOf(t); if (f) (m[f] ||= []).push(t); });
+    return m;
+  }, [repliedThreads, fx.folderOf]);
+  const folderCounts = useMemo(() => Object.fromEntries(Object.entries(folderThreads).map(([k, v]) => [k, v.length])), [folderThreads]);
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
   const byStep = useMemo(() => {
     const leadInRange = (l: Lead) => range.key === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
@@ -181,6 +193,15 @@ export default function InboxPage() {
         : { label: 'Delete conversation', icon: <Trash2 size={14} />, danger: true, run: () => threadK && setConfirmDelete({ threadKey: threadK }) },
     ];
   };
+  /** ⋮ → Move to … (folders), shown on conversation rows */
+  const folderItems = (t: Thread): MenuItem[] => {
+    const cur = fx.folderOf(t);
+    return [
+      ...fx.folders.filter((f) => f.id !== cur).map((f) => ({ label: `Move to “${f.name}”`, icon: <FolderInput size={14} />, run: () => fx.move([t.key], f.id) })),
+      ...(cur ? [{ label: 'Move back to Inbox', icon: <InboxIcon size={14} />, run: () => fx.move([t.key], null) }] : []),
+      { label: 'Move to a new folder…', icon: <FolderPlus size={14} />, run: () => { fx.create([t.key]); } },
+    ];
+  };
   const openConversationOrLead = (l: Lead) => { const t = threadForLead(l.id); if (t) setThreadKey(t.key); else setDrawerLead(l); };
 
   async function doDelete() {
@@ -207,7 +228,8 @@ export default function InboxPage() {
   const matchLead = (l: Lead) => !qq || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''}`.toLowerCase().includes(qq);
   const matchThread = (t: Thread) => !qq || `${t.lead?.company_name || ''} ${t.counterpart} ${t.last.subject} ${t.last.body}`.toLowerCase().includes(qq);
   const exportLeadList = isPipelineKey(stage) ? byStep[stage].filter(matchLead) : [];
-  const exportThreadList = stage === 'inbox' ? inboxThreads.filter(matchThread) : stage === 'waiting' ? waitingThreads.filter(matchThread) : [];
+  const shownThreads = folder ? folderThreads[folder] || [] : stage === 'inbox' ? inboxThreads : stage === 'waiting' ? waitingThreads : [];
+  const exportThreadList = shownThreads.filter(matchThread);
   const doExport = () => {
     const what = `inbox-${stage}`;
     if (isPipelineKey(stage)) exportLeads(exportLeadList, what, project.name, rangeLabel(range));
@@ -251,13 +273,22 @@ export default function InboxPage() {
             return <PipelineTile key={s.key} index={7 + i} size="lg" n={s.n} label={s.label} hint={s.hint} icon={<Ico size={22} />} color={s.color} count={counts[s.key]}
               active={stage === s.key} onClick={() => pickStage(s.key)} sub={s.key === 'inbox' ? inboxSub : waitingSub} />;
           })}
-          <HealthCard index={9} contacted={contactedTotal} replied={inboxThreads.length} meetings={counts.meeting + counts.won} won={counts.won} />
+          <HealthCard index={9} contacted={contactedTotal} replied={repliedThreads.length} meetings={counts.meeting + counts.won} won={counts.won} />
         </div>
       </section>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-        <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
-        <span className="text-[12px] text-faint">· {current.hint}</span>
+        {folder ? (
+          <>
+            <h2 className="inline-flex items-center gap-1.5 text-[15px] font-extrabold text-ink"><Folder size={15} className="text-accent" /> {fx.nameOf(folder)}</h2>
+            <span className="text-[12px] text-faint">· folder · conversations come back to the Inbox when they write again</span>
+          </>
+        ) : (
+          <>
+            <h2 className="text-[15px] font-extrabold text-ink">{current.n}. {current.label}</h2>
+            <span className="text-[12px] text-faint">· {current.hint}</span>
+          </>
+        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <SenderFilter value={sender} onChange={setSender} seen={seenAddrs} />
           <DateRangeSelect value={range} onChange={setRange} />
@@ -276,8 +307,12 @@ export default function InboxPage() {
       {loading ? <Thinking label="Loading pipeline…" /> : (
         <>
           {(stage === 'inbox' || stage === 'waiting') && (
-            <ThreadList threads={stage === 'inbox' ? inboxThreads : waitingThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)}
-              empty={stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
+            <div className="space-y-3">
+              <FolderBar api={fx} active={folder} inboxCount={stage === 'waiting' && !folder ? waitingThreads.length : inboxThreads.length} counts={folderCounts}
+                onPick={(f) => { setFolder(f); setQ(''); }} />
+              <ThreadList threads={shownThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)} folders={fx} extraItems={folderItems} currentFolder={folder}
+                empty={folder ? `Nothing in “${fx.nameOf(folder)}”. Drag a conversation onto the folder above, or use ⋮ → Move to.` : stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
+            </div>
           )}
           {stage === 'followup' && <FollowupList leads={byStep.followup} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
           {isPipelineKey(stage) && stage !== 'followup' && (
@@ -341,16 +376,46 @@ function HealthCard({ contacted, replied, meetings, won, index }: { contacted: n
 type MenuFor = (leadId: string | null | undefined, threadKey?: string | null) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 
 /* ── Inbox / Waiting: conversations ──────────────────────────────────────────── */
-function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[]; q: string; empty: string; menuFor: MenuFor; onOpen: (t: Thread) => void }) {
+function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, currentFolder }: {
+  threads: Thread[]; q: string; empty: string; menuFor: MenuFor; onOpen: (t: Thread) => void;
+  folders?: InboxFoldersApi; extraItems?: (t: Thread) => MenuItem[]; currentFolder?: string | null;
+}) {
   const filtered = useMemo(() => threads.filter((t) => !q || `${t.lead?.company_name || ''} ${t.counterpart} ${t.last.subject} ${t.last.body}`.toLowerCase().includes(q.toLowerCase())), [threads, q]);
   const pager = usePager(filtered, 'inbox-threads', 25);
   useEffect(() => { pager.reset(); }, [q, threads.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // pick several conversations → drag them together or "Move to"
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  useEffect(() => { setSel(new Set()); }, [threads]);
+  const toggle = (k: string) => setSel((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const moveSel = async (to: string | null) => { await folders?.move([...sel], to); setSel(new Set()); };
   if (!filtered.length) return <Card><EmptyState icon={<InboxIcon size={38} />} title={q ? 'No matches' : 'Nothing here'} sub={empty} /></Card>;
   return (
     <Card className="!p-0">
+      {folders && sel.size > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-[inherit] border-b border-line bg-[var(--accent-soft)] px-4 py-2.5 text-[12.5px]">
+          <b className="text-ink">{sel.size} selected</b><span className="text-dim">— drag them onto a folder, or move to:</span>
+          {currentFolder && <button onClick={() => moveSel(null)} className="btn btn-ghost btn-sm"><InboxIcon size={13} /> Inbox</button>}
+          {folders.folders.filter((f) => f.id !== currentFolder).map((f) => (
+            <button key={f.id} onClick={() => moveSel(f.id)} className="btn btn-ghost btn-sm"><Folder size={13} /> {f.name}</button>
+          ))}
+          <button onClick={async () => { await folders.create([...sel]); setSel(new Set()); }} className="btn btn-ghost btn-sm"><FolderPlus size={13} /> New folder…</button>
+          <button onClick={() => setSel(new Set())} className="ml-auto inline-flex items-center gap-1 text-dim hover:text-ink"><X size={13} /> Clear</button>
+        </div>
+      )}
       {pager.slice.map((t, i) => (
         <div key={t.key} style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
-          className={`reveal flex items-center gap-3 border-t border-line p-4 transition first:border-t-0 hover:bg-surface-2 ${t.theirTurn ? 'row-turn' : ''}`}>
+          draggable={!!folders}
+          onDragStart={(e) => {
+            const keys = sel.has(t.key) ? [...sel] : [t.key];
+            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(keys));
+            e.dataTransfer.setData('text/plain', `${keys.length} conversation${keys.length === 1 ? '' : 's'}`);
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          className={`reveal flex items-center gap-3 border-t border-line p-4 transition first:border-t-0 hover:bg-surface-2 ${t.theirTurn ? 'row-turn' : ''} ${folders ? 'cursor-grab active:cursor-grabbing' : ''} ${sel.has(t.key) ? 'bg-[var(--accent-soft)]' : ''}`}>
+          {folders && (
+            <input type="checkbox" checked={sel.has(t.key)} onChange={() => toggle(t.key)} aria-label="Select conversation"
+              className="h-4 w-4 flex-none cursor-pointer accent-[var(--accent)]" title="Select — then drag or move several at once" />
+          )}
           <button onClick={() => onOpen(t)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <span className="relative flex-none">
               <Avatar name={t.lead?.company_name || t.counterpart} size={38} />
@@ -370,7 +435,7 @@ function ThreadList({ threads, q, empty, menuFor, onOpen }: { threads: Thread[];
             <span className="hidden whitespace-nowrap text-[11px] text-faint sm:inline">{t.messages.length} msg · {t.inboundCount} from them</span>
             <span className="whitespace-nowrap text-[11.5px] text-faint">{relTime(t.last.sent_at || t.last.created_at)}</span>
           </button>
-          <ThreeDot items={menuFor(t.leadId, t.key)} />
+          <ThreeDot items={(() => { const base = menuFor(t.leadId, t.key); const extra = extraItems ? extraItems(t) : []; return [...base.slice(0, 1), ...extra, ...base.slice(1)]; })()} />
         </div>
       ))}
       <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="conversations" />

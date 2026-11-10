@@ -4,6 +4,7 @@ import { resolveEmail, sendEmail, textToHtml } from '@/lib/email/resend';
 import { completeJSON } from '@/lib/ai/providers';
 import { outreachPrompt } from '@/lib/ai/prompts';
 import { emailBlocked, checkLastEmail } from '@/lib/deliverability';
+import { agentFollowupsOn, optedIn } from '@/lib/automation';
 import type { Project, Lead, Stage } from '@/lib/types';
 
 export const runtime = 'edge';
@@ -21,6 +22,12 @@ export async function POST(req: Request) {
   if (!project) return bad('Project not found', 404);
   const P = project as Project;
 
+  // lock 1: the account switch (Autopilot) — off unless someone turned it on
+  const { data: st } = await supabase.from('user_settings').select('data').eq('owner_id', userId).maybeSingle();
+  if (!agentFollowupsOn(st?.data)) {
+    return bad('Agent follow-ups are turned off, so the agent sends nothing by itself. Turn them on under Autopilot if you want it to.', 403);
+  }
+
   const nowIso = new Date().toISOString();
   const { data: due } = await supabase
     .from('leads').select('*')
@@ -28,10 +35,11 @@ export async function POST(req: Request) {
     .in('stage', ['contacted', 'followup1', 'followup2'])
     .lte('next_action_at', nowIso)
     .not('email', 'is', null)
-    .limit(20);
+    .limit(200);
 
   // never email an address that bounced or marked us as spam
-  const leads = ((due as Lead[]) || []).filter((l) => !emailBlocked(l));
+  // lock 2: only leads someone opted in when emailing them; never an address that bounced
+  const leads = ((due as Lead[]) || []).filter((l) => optedIn(l) && !emailBlocked(l)).slice(0, 20);
   if (!leads.length) return ok({ processed: 0, results: [], message: 'No follow-ups due.' });
   if (dryRun) return ok({ processed: 0, due: leads.length, results: leads.map((l) => ({ company: l.company_name })) });
 
@@ -62,6 +70,7 @@ export async function POST(req: Request) {
         lead_id: lead.id, project_id: projectId, owner_id: userId, direction: 'outbound',
         subject: draft.subject, body: draft.body, status: 'sent', to_email: lead.email,
         from_email: email.from, provider_message_id: sent.id, sent_at: new Date().toISOString(),
+        ai_meta: { auto: true, mode: 'followup', step },
       });
 
       const nextGap = days[step];

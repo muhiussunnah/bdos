@@ -37,6 +37,8 @@ export async function POST(req: Request) {
       lead_id: inbound.lead_id, project_id: inbound.project_id, owner_id: userId, direction: 'outbound',
       subject, body, status: 'sent', to_email: to, from_email: from,
       provider_message_id: sent.id, sent_at: new Date().toISOString(),
+      // written and sent by a person from the conversation view — not the agent
+      ai_meta: { manual: true, mode: 'reply', by: senderName(from), reply_to: messageId },
     });
   } catch (e) {
     return bad(e instanceof Error ? e.message : 'Send failed', 502);

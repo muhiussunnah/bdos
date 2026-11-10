@@ -39,7 +39,7 @@ export function ComposeModal({ open, onClose, onSent, lead, initialSubject, init
   const [saveLead, setSaveLead] = useState(true);
   const [company, setCompany] = useState('');
   const [contactName, setContactName] = useState('');
-  const [startFollowups, setStartFollowups] = useState(true);
+  const [startFollowups, setStartFollowups] = useState(false); // off unless the user opts in
   const [busy, setBusy] = useState<'send' | 'ai' | null>(null);
   const [sugs, setSugs] = useState<Picked[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
@@ -64,7 +64,7 @@ export function ComposeModal({ open, onClose, onSent, lead, initialSubject, init
     } else {
       setPicked(null); setTo(''); setCompany(''); setContactName('');
     }
-    setCc(''); setBcc(''); setShowCc(false); setSubject(initialSubject || ''); setBody(initialHtml || ''); setFiles([]); setSaveLead(true); setStartFollowups(true);
+    setCc(''); setBcc(''); setShowCc(false); setSubject(initialSubject || ''); setBody(initialHtml || ''); setFiles([]); setSaveLead(true); setStartFollowups(false);
     const all = sendersFrom(settings);
     setFromId((initialFromId && all.some((s) => s.id === initialFromId) ? initialFromId : '') || all.find((s) => s.isDefault)?.id || all[0]?.id || '');
     setTimeout(() => toRef.current?.focus(), 50);

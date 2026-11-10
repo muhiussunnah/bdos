@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { auth, bad, ok, logActivity } from '@/lib/api';
 import { fetchAll } from '@/lib/fetchAll';
 import { sendersFrom } from '@/lib/email/resend';
@@ -98,5 +99,42 @@ export async function POST() {
   if (linkedNow || moved || followed) {
     await logActivity(supabase, userId, null, 'inbox', `Sorted replies into the right projects: ${moved} moved, ${linkedNow} linked to their lead`, { moved, linked: linkedNow, answers: followed, how });
   }
-  return ok({ checked: unlinked.length, moved, linked: linkedNow, answers: followed, how });
+  const relabelled = await relabelReplies(supabase, userId).catch(() => 0);
+  return ok({ checked: unlinked.length, moved, linked: linkedNow, answers: followed, how, relabelled });
+}
+
+/**
+ * Answers written in the conversation view before 1.3.6 were saved without the "manual" mark and
+ * showed as AGENT. Each of them left a "Replied to …" activity at the same moment, so match
+ * those (same lead, within two minutes) and mark the email as written by a person.
+ */
+async function relabelReplies(supabase: SupabaseClient, userId: string): Promise<number> {
+  const since = new Date(Date.now() - 365 * 86400000).toISOString();
+  const [{ data: acts }, outs] = await Promise.all([
+    supabase.from('activity_log').select('meta, created_at').eq('owner_id', userId).eq('kind', 'inbox')
+      .like('message', 'Replied to %').gte('created_at', since).limit(5000),
+    fetchAll<{ id: string; lead_id: string | null; ai_meta: Record<string, unknown> | null; created_at: string }>((a, b) => supabase.from('messages')
+      .select('id, lead_id, ai_meta, created_at').eq('owner_id', userId).eq('direction', 'outbound')
+      .is('ai_meta->>manual', null).is('ai_meta->>auto', null).is('ai_meta->>agent', null)
+      .gte('created_at', since).order('created_at').order('id').range(a, b), 20000),
+  ]);
+  if (!acts?.length || !outs.length) return 0;
+  const used = new Set<string>();
+  let n = 0;
+  for (const act of acts as { meta: { leadId?: string | null } | null; created_at: string }[]) {
+    const leadId = act.meta?.leadId ?? null;
+    const t = new Date(act.created_at).getTime();
+    let best: { id: string; ai_meta: Record<string, unknown> | null; gap: number } | null = null;
+    for (const m of outs) {
+      if (used.has(m.id) || (m.lead_id ?? null) !== leadId) continue;
+      const gap = t - new Date(m.created_at).getTime(); // the email is saved just before the activity
+      if (gap < -5000 || gap > 120000) continue;
+      if (!best || Math.abs(gap) < best.gap) best = { id: m.id, ai_meta: m.ai_meta, gap: Math.abs(gap) };
+    }
+    if (!best) continue;
+    used.add(best.id);
+    const { error } = await supabase.from('messages').update({ ai_meta: { ...(best.ai_meta || {}), manual: true, mode: 'reply', relabelled: true } }).eq('id', best.id);
+    if (!error) n++;
+  }
+  return n;
 }

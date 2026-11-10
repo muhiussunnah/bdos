@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Repeat, Loader2, Sparkles, Phone, Mail, Check, ClipboardList, AlertCircle, Clock, CalendarDays, ListFilter } from 'lucide-react';
+import Link from 'next/link';
+import { Repeat, Loader2, Sparkles, Phone, Mail, Check, ClipboardList, AlertCircle, Clock, CalendarDays, ListFilter, ShieldCheck } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Avatar } from '@/components/ui';
 import { usePager, Pagination } from '@/components/listing';
@@ -10,6 +11,7 @@ import { ThreeDot, type MenuItem } from '@/components/Menu';
 import { OwnerBadge, useLeadLog } from '@/components/sales/CallFlow';
 import { stageLabel } from '@/lib/pipeline';
 import { decisionMaker, nextLabel, lastActionLabel, callState, dueOf, leadData, DUE_COLOR, DUE_SOFT, type Due } from '@/lib/sales';
+import { agentFollowupsOn, optedIn } from '@/lib/automation';
 import type { Lead } from '@/lib/types';
 
 type Bucket = 'all' | 'overdue' | 'today' | 'upcoming';
@@ -23,9 +25,10 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
   leads: Lead[]; q: string; onOpen: (l: Lead) => void; onWrite: (l: Lead) => void; onChange: () => void; showRunAll?: boolean;
   menuFor?: (leadId: string) => MenuItem[];
 }) {
-  const { project } = useApp();
+  const { project, settings } = useApp();
   const log = useLeadLog(onChange);
   const [running, setRunning] = useState(false);
+  const agentOn = agentFollowupsOn(settings?.data);
   const [bucket, setBucket] = useState<Bucket>('all');
   const now = new Date();
 
@@ -44,6 +47,8 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
     });
   }, [filtered, bucket]); // eslint-disable-line react-hooks/exhaustive-deps
   const due = filtered.filter((l) => l.next_action_at && new Date(l.next_action_at).getTime() <= now.getTime());
+  // the agent only ever emails leads that were opted in when someone emailed them
+  const dueForAgent = due.filter(optedIn);
   // page the queue like Outreach: 10 / 25 / 50 / 100 per page, remembered per list
   const pager = usePager(visible, 'followups', 25);
   useEffect(() => { pager.reset(); }, [q, bucket, leads.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,9 +83,16 @@ export function FollowupList({ leads, q, onOpen, onWrite, onChange, showRunAll =
         {showRunAll && (
           <div className="ml-auto flex items-center gap-2 text-[12.5px] text-dim">
             <Repeat size={14} className="text-accent" /><b className="text-ink">{due.length}</b> due now
-            <button onClick={runAll} disabled={running || !due.length} className="btn btn-accent btn-sm">
-              {running ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Run all due follow-ups
-            </button>
+            {agentOn ? (
+              <button onClick={runAll} disabled={running || !dueForAgent.length} className="btn btn-accent btn-sm"
+                title="The agent writes and sends a follow-up only to leads you ticked “Let the agent run automated follow-ups” for when emailing them">
+                {running ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Run all due follow-ups ({dueForAgent.length})
+              </button>
+            ) : (
+              <Link href="/app/autopilot" className="btn btn-ghost btn-sm" title="The agent never emails anyone by itself. Every email goes out because a person pressed Send. Turn agent follow-ups on under Autopilot.">
+                <ShieldCheck size={14} style={{ color: 'var(--green)' }} /> Agent emails off
+              </Link>
+            )}
           </div>
         )}
       </div>

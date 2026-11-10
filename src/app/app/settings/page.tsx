@@ -10,6 +10,7 @@ import { Card, Thinking } from '@/components/ui';
 import { SecretInput } from '@/components/SecretInput';
 import { PROVIDERS, LANGS, type ProviderKey } from '@/lib/constants';
 import { sendersFrom } from '@/lib/email/resend';
+import { patchSettingsData } from '@/lib/settingsData';
 import type { Sender } from '@/lib/types';
 
 type Secrets = Record<string, { has: boolean; hint: string; key: string; meta: Record<string, unknown> }>;
@@ -190,10 +191,11 @@ function EmailTab({ secrets, reload, settings, refreshSettings }: { secrets: Sec
       if (error) { setBusy(false); return toast.error(error.message); }
     }
     const def = senders.find((s) => s.isDefault) || senders[0] || null;
-    const { error } = await supabase.from('user_settings').update({
-      from_name: def?.name || null, from_email: def?.email || null,
-      data: { ...(settings?.data || {}), senders: senders.map((s) => ({ ...s, name: s.name.trim(), email: s.email.trim().toLowerCase() })) },
-    }).eq('owner_id', user.id);
+    // merge into the stored data (folders, automation, meetings … saved elsewhere stay intact)
+    const error = await patchSettingsData(supabase, user.id,
+      { senders: senders.map((s) => ({ ...s, name: s.name.trim(), email: s.email.trim().toLowerCase() })) },
+      { from_name: def?.name || null, from_email: def?.email || null },
+    ).then(() => null, (e: unknown) => ({ message: e instanceof Error ? e.message : 'Save failed' }));
     setBusy(false);
     if (error) return toast.error(error.message);
     reload(); refreshSettings();
@@ -287,7 +289,8 @@ function MeetingsTab({ settings, refreshSettings }: { settings: ReturnType<typeo
       const v = { bookingUrl: r.bookingUrl?.trim() || undefined, roomUrl: r.roomUrl?.trim() || undefined, calendarEmail: r.calendarEmail?.trim().toLowerCase() || undefined };
       if (v.bookingUrl || v.roomUrl || v.calendarEmail) clean[id] = v;
     }
-    const { error } = await supabase.from('user_settings').update({ data: { ...(settings?.data || {}), meeting: { ...ms, timezone: tz, duration, bySender: clean, fromId: fromId || undefined } } }).eq('owner_id', user.id);
+    const error = await patchSettingsData(supabase, user.id, { meeting: { ...ms, timezone: tz, duration, bySender: clean, fromId: fromId || undefined } })
+      .then(() => null, (e: unknown) => ({ message: e instanceof Error ? e.message : 'Save failed' }));
     setBusy(false);
     if (error) return toast.error(error.message);
     refreshSettings(); toast.success('Meeting settings saved');
