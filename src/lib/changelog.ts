@@ -27,6 +27,19 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.9',
+    date: '2026-11-11',
+    title: 'Email health report',
+    tag: 'feature',
+    notes: [
+      'Reports now starts with Email health for the whole account (all projects, all senders): emails sent since the start, bounce rate, spam complaints, reply rate, busiest day and the average per sending day.',
+      'The last 7 days are shown against Resend’s Free-plan limit of 100 emails a day, which counts every sender together.',
+      'Check with Resend reads the exact status of every email from the last 30 days (Resend keeps 30 days): delivered, bounced, spam, delayed, per sender.',
+      'Bounces Resend knows about but Klientic missed can be recorded with one click (Stop emailing them), so those addresses are never emailed again.',
+      'Breakdowns per sender, per project and per month.',
+    ],
+  },
+  {
     version: '1.3.8',
     date: '2026-11-10',
     title: 'Conversations open at the top',

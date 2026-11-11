@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { BarChart3, Sparkles, Loader2, TrendingUp } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking } from '@/components/ui';
+import EmailHealth from '@/components/EmailHealth';
 import type { Report } from '@/lib/types';
 
 const METRIC_LABELS: Record<string, string> = {
@@ -43,6 +44,7 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-4">
+      <EmailHealth />
       <div className="flex items-center justify-between">
         <p className="text-[13px] text-dim">A daily management snapshot — the numbers plus the agent&apos;s read on today&apos;s top opportunities.</p>
         <button onClick={generate} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Generate today&apos;s report</button>
