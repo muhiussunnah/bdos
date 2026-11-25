@@ -27,6 +27,15 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.4.0',
+    date: '2026-11-25',
+    title: 'Quick clicks keep every star and folder move',
+    tag: 'fix',
+    notes: [
+      'Starring several conversations quickly one after another could lose a star. Saves now happen one after another, so every star stays, and the same goes for moving conversations into folders.',
+    ],
+  },
+  {
     version: '1.3.10',
     date: '2026-11-25',
     title: 'Star important conversations',

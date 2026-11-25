@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Folder, FolderPlus, Inbox as InboxIcon, Pencil, Star, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
@@ -76,24 +76,29 @@ export type InboxFoldersApi = ReturnType<typeof useInboxFolders>;
 export function useInboxStars() {
   const { settings, supabase, user, refreshSettings } = useApp();
   const [state, setState] = useState<StarState>(() => starState(settings?.data));
-  useEffect(() => { setState(starState(settings?.data)); }, [settings?.data]);
+  // while saves are still running, the stored copy is behind what is on screen — don't sync from it
+  const pending = useRef(0);
+  useEffect(() => { if (!pending.current) setState(starState(settings?.data)); }, [settings?.data]);
 
   const isStarred = useCallback((key: string) => !!state[key], [state]);
 
   /** star (on = true) or unstar several conversations; applied at once, then saved */
   const star = useCallback(async (keys: string[], on: boolean, quiet = false) => {
     if (!keys.length) return;
-    const before = state;
     setState((s) => starOps(s, keys, on));
+    pending.current++;
     try {
-      await patchSettingsData(supabase, user.id, (cur) => ({ inbox_stars: starOps(starState(cur), keys, on) }));
-      refreshSettings();
+      const saved = await patchSettingsData(supabase, user.id, (cur) => ({ inbox_stars: starOps(starState(cur), keys, on) }));
+      if (pending.current === 1) setState(starState(saved));
       if (!quiet || keys.length > 1) toast.success(on ? `${keys.length === 1 ? 'Conversation' : `${keys.length} conversations`} starred` : `Star removed${keys.length > 1 ? ` from ${keys.length} conversations` : ''}`);
     } catch (e) {
-      setState(before);
+      setState((s) => starOps(s, keys, !on));
       toast.error(e instanceof Error ? e.message : 'Could not save the star');
+    } finally {
+      pending.current--;
+      if (!pending.current) refreshSettings();
     }
-  }, [state, supabase, user.id, refreshSettings]);
+  }, [supabase, user.id, refreshSettings]);
 
   const toggle = useCallback((key: string) => star([key], !state[key], true), [state, star]);
 
