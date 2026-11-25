@@ -27,6 +27,18 @@ export interface ChangeEntry {
 /** Newest first. Versions follow the rolling scheme above. */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '1.3.10',
+    date: '2026-11-25',
+    title: 'Star important conversations',
+    tag: 'feature',
+    notes: [
+      'Every conversation in the Inbox has a ☆ next to its checkbox. Click it and the whole row lights up gold, so the important ones stand out in the Inbox, in Waiting for answer and in every folder.',
+      'The new Starred chip next to Inbox lists every starred conversation in one place, from the Inbox and all folders. Drag conversations onto it to star them.',
+      'A star stays until someone removes it, even when new replies arrive, and everyone using the account sees the same stars.',
+      'You can also star from ⋮ → Star, from the conversation itself (Star next to Send reply), or by selecting several conversations and choosing Star.',
+    ],
+  },
+  {
     version: '1.3.9',
     date: '2026-11-11',
     title: 'Email health report',

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Send, Sparkles, Loader2, Search, Clock, CalendarCheck, Repeat, Trophy,
   Plus, ArrowRight, Inbox as InboxIcon, MessagesSquare, ArrowDownLeft, Trash2,
-  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync, Folder, FolderInput, FolderPlus, X, UserCheck,
+  FileText, XCircle, PhoneCall, PenLine, TrendingUp, FolderSync, Folder, FolderInput, FolderPlus, X, UserCheck, Star,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Card, EmptyState, Thinking, Modal, Avatar } from '@/components/ui';
@@ -16,7 +16,7 @@ import { FollowupList } from '@/components/FollowupList';
 import { ThreadDrawer } from '@/components/ThreadDrawer';
 import { PipelineTile, StageBar } from '@/components/PipelineTile';
 import { ThreeDot, type MenuItem } from '@/components/Menu';
-import { useInboxFolders, FolderBar, DRAG_TYPE, type InboxFoldersApi } from '@/components/InboxFolders';
+import { useInboxFolders, useInboxStars, FolderBar, StarButton, DRAG_TYPE, type InboxFoldersApi, type InboxStarsApi } from '@/components/InboxFolders';
 import { LeadFront } from '@/components/sales/LeadFront';
 import { useLeadLog, useSalesperson } from '@/components/sales/CallFlow';
 import { nameFromEmail, otherReplier, setPrimaryContact } from '@/lib/sales';
@@ -83,7 +83,10 @@ export default function InboxPage() {
   const fx = useInboxFolders();
   const { by } = useSalesperson(null);
   const [folder, setFolder] = useState<string | null>(null);
-  const pickStage = (s: StageKey) => { setStage(s); setFolder(null); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
+  // starred ("important") conversations: they light up everywhere; the Starred chip lists them all
+  const sx = useInboxStars();
+  const [starView, setStarView] = useState(false);
+  const pickStage = (s: StageKey) => { setStage(s); setFolder(null); setStarView(false); setQ(''); try { localStorage.setItem(LS_STAGE, s); } catch { /* ignore */ } };
 
   const load = useCallback(async () => {
     if (!project) return;
@@ -143,6 +146,8 @@ export default function InboxPage() {
     return m;
   }, [repliedThreads, fx.folderOf]);
   const folderCounts = useMemo(() => Object.fromEntries(Object.entries(folderThreads).map(([k, v]) => [k, v.length])), [folderThreads]);
+  // starred ones from the Inbox and every folder, newest first (same order as the Inbox)
+  const starredThreads = useMemo(() => repliedThreads.filter((t) => sx.isStarred(t.key)), [repliedThreads, sx.isStarred]);
   const waitingThreads = useMemo(() => inboxThreads.filter((t) => t.theirTurn && !(t.lead && (t.lead.stage === 'meeting' || t.lead.stage === 'closed'))), [inboxThreads]);
   const byStep = useMemo(() => {
     const leadInRange = (l: Lead) => range.key === 'all' || inRange(l.last_contacted_at || l.updated_at || l.created_at, bounds);
@@ -215,6 +220,13 @@ export default function InboxPage() {
       { label: 'Move to a new folder…', icon: <FolderPlus size={14} />, run: () => { fx.create([t.key]); } },
     ];
   };
+  /** ⋮ → Star / Remove star, then the folder moves */
+  const rowItems = (t: Thread): MenuItem[] => [
+    sx.isStarred(t.key)
+      ? { label: 'Remove star', icon: <Star size={14} />, run: () => sx.star([t.key], false) }
+      : { label: 'Star — mark as important', icon: <Star size={14} />, run: () => sx.star([t.key], true) },
+    ...folderItems(t),
+  ];
   const openConversationOrLead = (l: Lead) => { const t = threadForLead(l.id); if (t) setThreadKey(t.key); else setDrawerLead(l); };
 
   async function doDelete() {
@@ -241,7 +253,7 @@ export default function InboxPage() {
   const matchLead = (l: Lead) => !qq || `${l.company_name} ${l.contact_name} ${l.email} ${l.phone || ''}`.toLowerCase().includes(qq);
   const matchThread = (t: Thread) => !qq || `${t.lead?.company_name || ''} ${t.counterpart} ${t.last.subject} ${t.last.body}`.toLowerCase().includes(qq);
   const exportLeadList = isPipelineKey(stage) ? byStep[stage].filter(matchLead) : [];
-  const shownThreads = folder ? folderThreads[folder] || [] : stage === 'inbox' ? inboxThreads : stage === 'waiting' ? waitingThreads : [];
+  const shownThreads = starView ? starredThreads : folder ? folderThreads[folder] || [] : stage === 'inbox' ? inboxThreads : stage === 'waiting' ? waitingThreads : [];
   const exportThreadList = shownThreads.filter(matchThread);
   const doExport = () => {
     const what = `inbox-${stage}`;
@@ -291,7 +303,12 @@ export default function InboxPage() {
       </section>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-        {folder ? (
+        {starView ? (
+          <>
+            <h2 className="inline-flex items-center gap-1.5 text-[15px] font-extrabold text-ink"><Star size={15} fill="currentColor" style={{ color: 'var(--star)' }} /> Starred</h2>
+            <span className="text-[12px] text-faint">· the important ones, from the Inbox and every folder · they stay here until you remove the star</span>
+          </>
+        ) : folder ? (
           <>
             <h2 className="inline-flex items-center gap-1.5 text-[15px] font-extrabold text-ink"><Folder size={15} className="text-accent" /> {fx.nameOf(folder)}</h2>
             <span className="text-[12px] text-faint">· folder · conversations come back to the Inbox when they write again</span>
@@ -321,10 +338,11 @@ export default function InboxPage() {
         <>
           {(stage === 'inbox' || stage === 'waiting') && (
             <div className="space-y-3">
-              <FolderBar api={fx} active={folder} inboxCount={stage === 'waiting' && !folder ? waitingThreads.length : inboxThreads.length} counts={folderCounts}
-                onPick={(f) => { setFolder(f); setQ(''); }} />
-              <ThreadList threads={shownThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)} folders={fx} extraItems={folderItems} currentFolder={folder}
-                empty={folder ? `Nothing in “${fx.nameOf(folder)}”. Drag a conversation onto the folder above, or use ⋮ → Move to.` : stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
+              <FolderBar api={fx} active={starView ? '__starred' : folder} inboxCount={stage === 'waiting' && !folder ? waitingThreads.length : inboxThreads.length} counts={folderCounts}
+                onPick={(f) => { setFolder(f); setStarView(false); setQ(''); }}
+                starred={{ count: starredThreads.length, active: starView, onPick: () => { setStarView(true); setFolder(null); setQ(''); }, onDrop: (keys) => sx.star(keys, true) }} />
+              <ThreadList threads={shownThreads} q={q} menuFor={menuFor} onOpen={(t) => setThreadKey(t.key)} folders={fx} stars={sx} extraItems={rowItems} currentFolder={starView ? null : folder}
+                empty={starView ? 'No starred conversations. Click the ☆ next to a conversation to star it — the whole row lights up so it is easy to find.' : folder ?`Nothing in “${fx.nameOf(folder)}”. Drag a conversation onto the folder above, or use ⋮ → Move to.` : stage === 'waiting' ? 'Nothing waiting — every reply has been answered.' : 'No replies yet. When a lead writes back, the whole conversation shows up here.'} />
             </div>
           )}
           {stage === 'followup' && <FollowupList leads={byStep.followup} q={q} onOpen={openConversationOrLead} onWrite={setComposeLead} onChange={refresh} menuFor={(id) => menuFor(id, threadForLead(id)?.key)} />}
@@ -337,7 +355,8 @@ export default function InboxPage() {
 
       <ThreadDrawer thread={threadKey ? threadByKey[threadKey] || null : null} onClose={() => setThreadKey(null)} onChange={refresh}
         onMove={(id, s) => moveLead(id, s)} onOpenLead={(l) => { setThreadKey(null); setDrawerLead(l); }}
-        onDelete={(id) => setConfirmDelete({ leadId: id })} onDeleteThread={(key) => setConfirmDelete({ threadKey: key })} />
+        onDelete={(id) => setConfirmDelete({ leadId: id })} onDeleteThread={(key) => setConfirmDelete({ threadKey: key })}
+        starred={threadKey ? sx.isStarred(threadKey) : false} onStar={threadKey ? () => sx.toggle(threadKey) : undefined} />
       <ConfirmDialog open={!!confirmDelete} busy={deleting} onCancel={() => setConfirmDelete(null)} onConfirm={doDelete}
         title={confirmDelete?.leadId ? 'Delete this lead?' : 'Delete this conversation?'}
         body={confirmDelete?.leadId
@@ -389,9 +408,9 @@ function HealthCard({ contacted, replied, meetings, won, index }: { contacted: n
 type MenuFor = (leadId: string | null | undefined, threadKey?: string | null) => { label: string; icon?: React.ReactNode; run: () => void; danger?: boolean }[];
 
 /* ── Inbox / Waiting: conversations ──────────────────────────────────────────── */
-function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, currentFolder }: {
+function ThreadList({ threads, q, empty, menuFor, onOpen, folders, stars, extraItems, currentFolder }: {
   threads: Thread[]; q: string; empty: string; menuFor: MenuFor; onOpen: (t: Thread) => void;
-  folders?: InboxFoldersApi; extraItems?: (t: Thread) => MenuItem[]; currentFolder?: string | null;
+  folders?: InboxFoldersApi; stars?: InboxStarsApi; extraItems?: (t: Thread) => MenuItem[]; currentFolder?: string | null;
 }) {
   const filtered = useMemo(() => threads.filter((t) => !q || `${t.lead?.company_name || ''} ${t.counterpart} ${t.last.subject} ${t.last.body}`.toLowerCase().includes(q.toLowerCase())), [threads, q]);
   const pager = usePager(filtered, 'inbox-threads', 25);
@@ -406,7 +425,14 @@ function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, c
     <Card className="!p-0">
       {folders && sel.size > 0 && (
         <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-[inherit] border-b border-line bg-[var(--accent-soft)] px-4 py-2.5 text-[12.5px]">
-          <b className="text-ink">{sel.size} selected</b><span className="text-dim">— drag them onto a folder, or move to:</span>
+          <b className="text-ink">{sel.size} selected</b>
+          {stars && (
+            <>
+              <button onClick={async () => { await stars.star([...sel], true); setSel(new Set()); }} className="btn btn-ghost btn-sm"><Star size={13} fill="currentColor" style={{ color: 'var(--star)' }} /> Star</button>
+              {[...sel].some((k) => stars.isStarred(k)) && <button onClick={async () => { await stars.star([...sel], false); setSel(new Set()); }} className="btn btn-ghost btn-sm"><Star size={13} /> Remove star</button>}
+            </>
+          )}
+          <span className="text-dim">— drag them onto a folder, or move to:</span>
           {currentFolder && <button onClick={() => moveSel(null)} className="btn btn-ghost btn-sm"><InboxIcon size={13} /> Inbox</button>}
           {folders.folders.filter((f) => f.id !== currentFolder).map((f) => (
             <button key={f.id} onClick={() => moveSel(f.id)} className="btn btn-ghost btn-sm"><Folder size={13} /> {f.name}</button>
@@ -415,7 +441,9 @@ function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, c
           <button onClick={() => setSel(new Set())} className="ml-auto inline-flex items-center gap-1 text-dim hover:text-ink"><X size={13} /> Clear</button>
         </div>
       )}
-      {pager.slice.map((t, i) => (
+      {pager.slice.map((t, i) => {
+        const starred = !!stars?.isStarred(t.key);
+        return (
         <div key={t.key} style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
           draggable={!!folders}
           onDragStart={(e) => {
@@ -424,10 +452,15 @@ function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, c
             e.dataTransfer.setData('text/plain', `${keys.length} conversation${keys.length === 1 ? '' : 's'}`);
             e.dataTransfer.effectAllowed = 'move';
           }}
-          className={`reveal flex items-center gap-3 border-t border-line p-4 transition first:border-t-0 hover:bg-surface-2 ${t.theirTurn ? 'row-turn' : ''} ${folders ? 'cursor-grab active:cursor-grabbing' : ''} ${sel.has(t.key) ? 'bg-[var(--accent-soft)]' : ''}`}>
-          {folders && (
-            <input type="checkbox" checked={sel.has(t.key)} onChange={() => toggle(t.key)} aria-label="Select conversation"
-              className="h-4 w-4 flex-none cursor-pointer accent-[var(--accent)]" title="Select — then drag or move several at once" />
+          className={`reveal flex items-center gap-3 border-t border-line p-4 transition first:border-t-0 ${sel.has(t.key) ? 'bg-[var(--accent-soft)]' : starred ? 'row-star' : 'hover:bg-surface-2'} ${t.theirTurn && !starred ? 'row-turn' : ''} ${folders ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+          {(folders || stars) && (
+            <div className="-ml-1 flex flex-none items-center gap-0.5">
+              {folders && (
+                <input type="checkbox" checked={sel.has(t.key)} onChange={() => toggle(t.key)} aria-label="Select conversation"
+                  className="h-4 w-4 flex-none cursor-pointer accent-[var(--accent)]" title="Select — then drag or move several at once" />
+              )}
+              {stars && <StarButton on={starred} onClick={() => stars.toggle(t.key)} />}
+            </div>
           )}
           <button onClick={() => onOpen(t)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <span className="relative flex-none">
@@ -450,7 +483,8 @@ function ThreadList({ threads, q, empty, menuFor, onOpen, folders, extraItems, c
           </button>
           <ThreeDot items={(() => { const base = menuFor(t.leadId, t.key); const extra = extraItems ? extraItems(t) : []; return [...base.slice(0, 1), ...extra, ...base.slice(1)]; })()} />
         </div>
-      ))}
+        );
+      })}
       <Pagination page={pager.page} pages={pager.pages} pageSize={pager.pageSize} total={pager.total} onPage={pager.setPage} onPageSize={pager.setPageSize} noun="conversations" />
     </Card>
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus, CalendarPlus, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, UserCheck } from 'lucide-react';
+import { Send, Loader2, Paperclip, ArrowDownLeft, ArrowUpRight, Sparkles, ExternalLink, Trash2, Phone, Link2, StickyNote, MailPlus, CalendarPlus, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronUp, UserCheck, Star } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { Drawer } from '@/components/ui';
 import { LinkLeadModal, useLeadLog, useSalesperson } from '@/components/sales/CallFlow';
@@ -24,12 +24,14 @@ const LS_ORDER = 'klientic.thread.order';
  * "Oldest first" reads it as a story) — with a reply box at the bottom.
  * Quoted history inside a reply is folded away, duplicates are shown once.
  */
-export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, onDelete, onDeleteThread }: {
+export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, onDelete, onDeleteThread, starred, onStar }: {
   thread: Thread | null; onClose: () => void; onChange: () => void;
   onMove: (leadId: string | null, stage: Stage) => void;
   onOpenLead: (lead: Lead) => void;
   onDelete?: (leadId: string) => void;
   onDeleteThread?: (threadKey: string) => void;
+  /** starred ("important") conversation — shown + toggled from the footer */
+  starred?: boolean; onStar?: () => void;
 }) {
   const log = useLeadLog(onChange);
   const { supabase } = useApp();
@@ -117,6 +119,13 @@ export function ThreadDrawer({ thread, onClose, onChange, onMove, onOpenLead, on
           <textarea className="input min-h-[96px]" value={reply} onChange={(e) => setReply(e.target.value)} placeholder={thread.theirTurn ? 'Answer them…' : 'Send a follow-up…'} />
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={send} disabled={busy} className="btn btn-accent">{busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send reply</button>
+            {onStar && (
+              <button onClick={onStar} className="btn btn-ghost btn-sm" aria-pressed={!!starred}
+                title={starred ? 'Starred — click to remove the star' : 'Star — mark as important so it lights up in the Inbox'}
+                style={starred ? { borderColor: 'var(--star)', background: 'var(--star-soft)', color: 'var(--text)' } : undefined}>
+                <Star size={14} fill={starred ? 'currentColor' : 'none'} style={{ color: 'var(--star)' }} /> {starred ? 'Starred' : 'Star'}
+              </button>
+            )}
             <div className="ml-auto">
               {thread.leadId
                 ? (onDelete && <button onClick={() => onDelete(thread.leadId!)} title="Delete this lead" className="btn btn-ghost btn-sm text-bad"><Trash2 size={14} /> Delete lead</button>)

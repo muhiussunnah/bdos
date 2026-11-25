@@ -34,6 +34,9 @@
   --green-soft: rgba(22, 163, 74, .10);
   --amber: #E08C1F;
   --amber-soft: rgba(224, 140, 31, .12);
+  --star: #E5A800;
+  --star-soft: rgba(250, 196, 0, .16);
+  --star-soft-2: rgba(250, 196, 0, .24);
   --red: #E5484D;
   --red-soft: rgba(229, 72, 77, .10);
   --blue: #2563EB;
@@ -69,6 +72,9 @@
   --accent-soft: rgba(164, 53, 232, .16);
   --green-soft: rgba(22, 163, 74, .16);
   --amber-soft: rgba(224, 140, 31, .18);
+  --star: #F5C518;
+  --star-soft: rgba(245, 197, 24, .13);
+  --star-soft-2: rgba(245, 197, 24, .20);
   --red-soft: rgba(229, 72, 77, .16);
   --blue-soft: rgba(37, 99, 235, .18);
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
@@ -244,6 +250,13 @@
   .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 0 rgba(224,140,31,.55); animation: livepulse 1.6s ease-out infinite; }
   @keyframes livepulse { 0% { box-shadow: 0 0 0 0 rgba(224,140,31,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,140,31,0); } 100% { box-shadow: 0 0 0 0 rgba(224,140,31,0); } }
   .row-turn { box-shadow: inset 3px 0 0 var(--amber); }
+  /* starred ("important") conversation: the whole row lights up gold */
+  .row-star { background: linear-gradient(90deg, var(--star-soft-2), var(--star-soft) 55%, var(--star-soft)); box-shadow: inset 4px 0 0 var(--star); }
+  .row-star:hover { background: var(--star-soft-2); }
+  .star-btn { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 8px; color: var(--faint); transition: color .15s, background .15s, transform .15s; }
+  .star-btn:hover { color: var(--star); background: var(--star-soft); }
+  .star-btn.on { color: var(--star); }
+  .star-btn:active { transform: scale(.88); }
   .hand { font-family: var(--font-hand), 'Segoe Script', 'Bradley Hand', cursive; }
 
   @media (prefers-reduced-motion: reduce) {

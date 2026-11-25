@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Folder, FolderPlus, Inbox as InboxIcon, Pencil, Trash2 } from 'lucide-react';
+import { Folder, FolderPlus, Inbox as InboxIcon, Pencil, Star, Trash2 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppProvider';
 import { useDialogs } from '@/components/providers/DialogProvider';
 import { ThreeDot } from '@/components/Menu';
 import { patchSettingsData } from '@/lib/settingsData';
-import { folderState, folderOf as folderOfState, folderOps, newFolderId, type FolderState, type InboxFolder } from '@/lib/inboxFolders';
+import { folderState, folderOf as folderOfState, folderOps, newFolderId, starState, starOps, type FolderState, type InboxFolder, type StarState } from '@/lib/inboxFolders';
 import type { Thread } from '@/lib/threads';
 
 /** Drag payload type for conversations (one or several thread keys). */
@@ -72,6 +72,46 @@ export function useInboxFolders() {
 
 export type InboxFoldersApi = ReturnType<typeof useInboxFolders>;
 
+/** Starred conversations (saved to user_settings.data.inbox_stars). */
+export function useInboxStars() {
+  const { settings, supabase, user, refreshSettings } = useApp();
+  const [state, setState] = useState<StarState>(() => starState(settings?.data));
+  useEffect(() => { setState(starState(settings?.data)); }, [settings?.data]);
+
+  const isStarred = useCallback((key: string) => !!state[key], [state]);
+
+  /** star (on = true) or unstar several conversations; applied at once, then saved */
+  const star = useCallback(async (keys: string[], on: boolean, quiet = false) => {
+    if (!keys.length) return;
+    const before = state;
+    setState((s) => starOps(s, keys, on));
+    try {
+      await patchSettingsData(supabase, user.id, (cur) => ({ inbox_stars: starOps(starState(cur), keys, on) }));
+      refreshSettings();
+      if (!quiet || keys.length > 1) toast.success(on ? `${keys.length === 1 ? 'Conversation' : `${keys.length} conversations`} starred` : `Star removed${keys.length > 1 ? ` from ${keys.length} conversations` : ''}`);
+    } catch (e) {
+      setState(before);
+      toast.error(e instanceof Error ? e.message : 'Could not save the star');
+    }
+  }, [state, supabase, user.id, refreshSettings]);
+
+  const toggle = useCallback((key: string) => star([key], !state[key], true), [state, star]);
+
+  return { isStarred, star, toggle, count: Object.keys(state).length };
+}
+
+export type InboxStarsApi = ReturnType<typeof useInboxStars>;
+
+/** The star button on a conversation row / in the conversation. */
+export function StarButton({ on, onClick, size = 16 }: { on: boolean; onClick: () => void; size?: number }) {
+  return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} className={`star-btn ${on ? 'on' : ''}`}
+      aria-pressed={on} aria-label={on ? 'Remove star' : 'Star — mark as important'} title={on ? 'Starred — click to remove the star' : 'Star — mark as important so it lights up'}>
+      <Star size={size} fill={on ? 'currentColor' : 'none'} strokeWidth={on ? 1.6 : 2} />
+    </button>
+  );
+}
+
 function readKeys(e: React.DragEvent): string[] {
   try { const v = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
 }
@@ -80,11 +120,28 @@ function readKeys(e: React.DragEvent): string[] {
  * Inbox + folder chips. Every chip is a drop target: drag a conversation (or several selected
  * ones) onto a folder to move it there, onto "Inbox" to bring it back.
  */
-export function FolderBar({ api, active, onPick, inboxCount, counts }: {
+export function FolderBar({ api, active, onPick, inboxCount, counts, starred }: {
   api: InboxFoldersApi; active: string | null; onPick: (folderId: string | null) => void;
   inboxCount: number; counts: Record<string, number>;
+  /** the "Starred" chip: every starred conversation in one place; dropping on it stars them */
+  starred?: { count: number; active: boolean; onPick: () => void; onDrop: (keys: string[]) => void };
 }) {
   const [over, setOver] = useState<string | null | undefined>(undefined);
+  const starChip = starred && (
+    <div key="starred"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TYPE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver('__star'); } }}
+      onDragLeave={() => setOver((o) => (o === '__star' ? undefined : o))}
+      onDrop={(e) => { e.preventDefault(); setOver(undefined); const keys = readKeys(e); if (keys.length) starred.onDrop(keys); }}
+      className={`inline-flex items-center rounded-[11px] border transition ${over === '__star' ? 'scale-[1.04] shadow-sm' : ''}`}
+      style={{ borderColor: starred.active || over === '__star' ? 'var(--star)' : 'var(--border)', background: starred.active || over === '__star' ? 'var(--star-soft)' : 'var(--surface)' }}>
+      <button onClick={starred.onPick} className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-bold ${starred.active ? 'text-ink' : 'text-dim'}`}
+        title="Starred conversations — the important ones. Drop a conversation here to star it">
+        <Star size={13} fill="currentColor" style={{ color: 'var(--star)' }} />
+        <span>Starred</span>
+        <span className="rounded-md px-1.5 text-[11px]" style={{ background: 'var(--border)' }}>{starred.count}</span>
+      </button>
+    </div>
+  );
   const chip = (id: string | null, name: string, count: number, folder?: InboxFolder) => {
     const isActive = active === id;
     const isOver = over === id;
@@ -114,6 +171,7 @@ export function FolderBar({ api, active, onPick, inboxCount, counts }: {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {chip(null, 'Inbox', inboxCount)}
+      {starChip}
       {api.folders.map((f) => chip(f.id, f.name, counts[f.id] || 0, f))}
       <button onClick={() => api.create()} className="inline-flex items-center gap-1.5 rounded-[11px] border border-dashed border-line px-3 py-1.5 text-[12.5px] font-bold text-dim transition hover:border-accent hover:text-accent">
         <FolderPlus size={13} /> New folder

@@ -50,3 +50,24 @@ export const folderOps = {
     return { folders: s.folders.filter((f) => f.id !== id), map };
   },
 };
+
+/**
+ * Starred ("important") conversations. Stored in user_settings.data.inbox_stars as
+ * { [threadKey]: when it was starred }. A star stays until someone removes it — unlike a folder,
+ * a new reply does not clear it. Starred rows light up in every list, and the "Starred" chip
+ * shows them all in one place (Inbox and folders together).
+ */
+export type StarState = Record<string, string>;
+
+export function starState(settingsData: unknown): StarState {
+  const raw = (settingsData as { inbox_stars?: unknown } | null | undefined)?.inbox_stars;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([k, v]) => k && typeof v === 'string')) as StarState;
+}
+
+export function starOps(s: StarState, keys: string[], on: boolean): StarState {
+  const next = { ...s };
+  const at = new Date().toISOString();
+  for (const k of keys) { if (on) next[k] = next[k] || at; else delete next[k]; }
+  return next;
+}
